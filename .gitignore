@@ -94,3 +94,7 @@ Config/DefaultEditor*
 __pycache__/
 *.pyc
 /data/
+
+bedlam2_retargeting_humanoid/
+
+mujoco_Humanoid_motionretargeting/
