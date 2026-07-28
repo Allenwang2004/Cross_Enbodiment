@@ -1,0 +1,3 @@
+[submodule "mujoco_Humanoid_motionretargeting"]
+	path = mujoco_Humanoid_motionretargeting
+	url = https://github.com/Allenwang2004/Mujoco_Humanoid_motionretargeting.git
