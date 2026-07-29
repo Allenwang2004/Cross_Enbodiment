@@ -7,13 +7,13 @@ Edit the GRIDS dict below to widen/narrow the search space, then run
 (from the project root):
     uv run scripts/humenv_reward_combinations.py
 
-Writes outputs/reward_lists/humenv_reward_combinations.txt.
+Writes docs/humenv_reward_combinations.txt.
 """
 
 import itertools
 from pathlib import Path
 
-OUT_PATH = Path(__file__).resolve().parent.parent / "outputs" / "reward_lists" / "humenv_reward_combinations.txt"
+OUT_PATH = Path(__file__).resolve().parent.parent / "docs" / "humenv_reward_combinations.txt"
 
 ARM_POSES = ["l", "m", "h", "x"]
 

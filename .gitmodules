@@ -1,6 +1,1 @@
-[submodule "mujoco_Humanoid_motionretargeting"]
-	path = mujoco_Humanoid_motionretargeting
-	url = https://github.com/Allenwang2004/Mujoco_Humanoid_motionretargeting.git
-[submodule "bedlam2_retargeting_numanoid"]
-	path = bedlam2_retargeting_numanoid
-	url = https://github.com/Allenwang2004/BEDLAM2_RETARGETING_humanoid.git
+

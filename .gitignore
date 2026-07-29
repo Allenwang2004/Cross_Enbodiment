@@ -94,6 +94,7 @@ Config/DefaultEditor*
 __pycache__/
 *.pyc
 /data/
+/datasets/metamotivo-M-1-datasets/
 
 bedlam2_retargeting_humanoid/
 

@@ -1,12 +1,12 @@
 """
-Build data/crossenbodiment-1-datasets from what's already generated. Each
-row (indexed by reward_name/trial, enumerated from outputs/rollouts/npz/)
-bundles:
+Build datasets/crossenbodiment-1-datasets from what's already generated.
+Each row (indexed by reward_name/trial, enumerated from
+data/origin_motion/) bundles:
   - origin_z          the z latent used for that rollout
-                       (outputs/rollouts/z/<reward_name>/<reward_name>_<trial>.npy)
+                       (data/z/<reward_name>/<reward_name>_<trial>.npy)
   - retargeted_motion  the origin qpos trajectory retargeted onto the target
                        body via scripts/qpos_retarget.py
-                       (outputs/rollouts/retarget_npz/<reward_name>_<trial>.npz)
+                       (data/retargeted_motion/<reward_name>_<trial>.npz)
                        -- 1:1 matched with the origin rollout by filename, so
                        every row gets one.
   - morphology         body-shape scale parameters -- currently fixed to
@@ -17,14 +17,14 @@ bundles:
                        it before training on this.
 
 origin_motion (the un-retargeted qpos) is intentionally NOT included in the
-dataset -- it only exists as an intermediate used to produce
+built dataset -- it only exists as an intermediate used to produce
 retargeted_motion and origin_z, both of which are already in the manifest.
 
 This only builds a manifest + copies files into a self-contained dataset
 folder; it does not regenerate any rollouts or retargeting.
 
 Usage (from project root, after scripts/qpos_retarget.py has populated
-outputs/rollouts/retarget_npz/):
+data/retargeted_motion/):
     uv run scripts/build_dataset.py
     uv run scripts/build_dataset.py --mode symlink   # save disk instead of copying
 """
@@ -35,14 +35,14 @@ import shutil
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ROLLOUTS_DIR = REPO_ROOT / "outputs" / "rollouts"
-NPZ_DIR = ROLLOUTS_DIR / "npz"
-Z_DIR = ROLLOUTS_DIR / "z"
-RETARGET_DIR = ROLLOUTS_DIR / "retarget_npz"
+DATA_DIR = REPO_ROOT / "data"
+NPZ_DIR = DATA_DIR / "origin_motion"
+Z_DIR = DATA_DIR / "z"
+RETARGET_DIR = DATA_DIR / "retargeted_motion"
 MORPHOLOGY_SRC = REPO_ROOT / "assets" / "robots" / "robot_child_parameter.json"
 MORPHOLOGY_LABEL = "child"
 
-DATASET_DIR = REPO_ROOT / "data" / "crossenbodiment-1-datasets"
+DATASET_DIR = REPO_ROOT / "datasets" / "crossenbodiment-1-datasets"
 MANIFEST_PATH = DATASET_DIR / "manifest.jsonl"
 
 

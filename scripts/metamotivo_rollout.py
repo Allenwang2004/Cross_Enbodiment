@@ -13,10 +13,9 @@ Two ways to pick the context vector z:
 
 Batch mode (--tasks-file): run --rollouts-per-task rollouts for every reward
 name listed in a text file (one name per line, e.g.
-outputs/reward_lists/humenv_all_tasks_official.txt). Only the first rollout
-of each task is rendered/saved as video (video is expensive); every rollout's
-trajectory (qpos/qvel/action/obs/z) is saved as an .npz, named after the
-task.
+docs/humenv_all_tasks_official.txt). Only the first rollout of each task is
+rendered/saved as video (video is expensive); every rollout's qpos
+trajectory and z are saved separately under --data-dir.
 
 Install (see https://github.com/facebookresearch/metamotivo):
     pip install metamotivo humenv[all] gymnasium mujoco torch imageio h5py
@@ -24,9 +23,12 @@ Install (see https://github.com/facebookresearch/metamotivo):
 Usage (run from the project root):
     uv run scripts/metamotivo_rollout.py --z-mode random --num-rollouts 5 --steps 300
     uv run scripts/metamotivo_rollout.py --z-mode reward --reward-name "move-ego-0-2" --steps 300
-    uv run scripts/metamotivo_rollout.py --tasks-file outputs/reward_lists/humenv_all_tasks_official.txt --steps 300
+    uv run scripts/metamotivo_rollout.py --tasks-file docs/humenv_all_tasks_official.txt --steps 300
 
-Output videos are written to outputs/rollouts/ by default (--out-dir to change).
+Batch mode writes qpos to data/origin_motion/<reward_name>/, z to
+data/z/<reward_name>/, and video to outputs/robot_video/ (--data-dir/
+--out-dir to change either root). Single/random-rollout mode just writes
+rollout_<i>.mp4 under --out-dir (default outputs/robot_video/).
 """
 
 import argparse
@@ -150,8 +152,9 @@ def run_batch(model, env, args):
     """--tasks-file mode: for every reward name in the file, run
     --rollouts-per-task rollouts, save video only for the first. Each
     rollout writes a qpos-only .npz (trajectory data, for e.g. FBX
-    conversion) and the z vector used, saved separately since it's a
-    per-rollout scalar/latent, not a per-frame trajectory."""
+    conversion) under --data-dir/origin_motion/ and the z vector used
+    (a per-rollout latent, not a per-frame trajectory) under
+    --data-dir/z/."""
     buffer = load_inference_buffer(args)
 
     reward_names = [
@@ -160,10 +163,10 @@ def run_batch(model, env, args):
         if line.strip()
     ]
 
-    out_dir = Path(args.out_dir)
-    video_dir = out_dir / "video"
-    npz_dir = out_dir / "npz"
-    z_dir = out_dir / "z"
+    data_dir = Path(args.data_dir)
+    video_dir = Path(args.out_dir)
+    npz_dir = data_dir / "origin_motion"
+    z_dir = data_dir / "z"
     video_dir.mkdir(parents=True, exist_ok=True)
     npz_dir.mkdir(parents=True, exist_ok=True)
     z_dir.mkdir(parents=True, exist_ok=True)
@@ -228,9 +231,14 @@ def main():
                               "(each with a fresh random z when --z-mode random)")
     parser.add_argument("--seed", type=int, default=0,
                          help="base seed; rollout i uses seed + i")
-    parser.add_argument("--out-dir", default="outputs/rollouts",
-                         help="directory to write output into "
-                              "(relative to the current working directory)")
+    parser.add_argument("--out-dir", default="outputs/robot_video",
+                         help="directory to write video into (single-rollout "
+                              "mode: rollout_<i>.mp4 directly here; "
+                              "--tasks-file mode: <reward_name>.mp4 here)")
+    parser.add_argument("--data-dir", default="data",
+                         help="--tasks-file mode only: qpos goes to "
+                              "<data-dir>/origin_motion/<reward_name>/, z to "
+                              "<data-dir>/z/<reward_name>/")
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
 

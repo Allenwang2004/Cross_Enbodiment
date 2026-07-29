@@ -36,7 +36,7 @@ as intended. That script's own docstring covers its retargeting assumptions
 (same body/joint topology across robot.xml variants, root-height rescaling
 only, no per-limb IK correction).
 
-Usage (from project root, once data/crossenbodiment-1-datasets exists):
+Usage (from project root, once datasets/crossenbodiment-1-datasets exists):
     uv run model/train.py
 """
 
@@ -57,7 +57,7 @@ from metamotivo.fb_cpr.huggingface import FBcprModel
 
 from model import losses
 from model.config import TrainConfig
-from model.dataset import CrossEmbodimentDataset, load_beta
+from model.dataset import CrossEmbodimentDataset, load_beta, load_task_list
 from model.networks import ActionHead, LatentAdapter
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -135,7 +135,11 @@ def train(cfg: TrainConfig):
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
 
-    dataset = CrossEmbodimentDataset(REPO_ROOT / cfg.dataset_dir)
+    train_tasks = None
+    train_tasks_path = REPO_ROOT / cfg.dataset_dir / "splits" / "train_tasks.txt"
+    if train_tasks_path.exists():
+        train_tasks = load_task_list(train_tasks_path)
+    dataset = CrossEmbodimentDataset(REPO_ROOT / cfg.dataset_dir, task_filter=train_tasks)
     beta_dim = len(load_beta(REPO_ROOT / cfg.target_morphology_json))
 
     model = FBcprModel.from_pretrained(cfg.metamotivo_repo).to(cfg.device)

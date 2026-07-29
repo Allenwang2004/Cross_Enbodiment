@@ -3,11 +3,11 @@ Optionally render a second qpos file (e.g. the retargeted version) side by
 side for direct visual comparison.
 
 Usage (from project root):
-    uv run scripts/render_qpos_playback.py --qpos a.npz --xml assets/robots/robot.xml --out a.mp4
+    cd /home/allen19/crossenbodiment
     uv run scripts/render_qpos_playback.py \
-        --qpos outputs/rollouts/npz/crawl-0.4-0-d/crawl-0.4-0-d_0.npz --xml assets/robots/robot.xml \
-        --qpos2 outputs/rollouts/retarget_npz/crawl-0.4-0-d_0.npz --xml2 assets/robots/robot_child.xml \
-        --out compare.mp4
+        --qpos data/origin_motion/move-ego--90-2/move-ego--90-2_0.npz --xml assets/robots/robot.xml \
+        --qpos2 data/origin_motion/move-ego--90-2/move-ego--90-2_0.npz --xml2 assets/robots/robot_child.xml \
+        --out outputs/robot_video/compare.mp4 2>&1 | grep -v "EGLError\|Exception ignored\|Traceback\|File \"\|renderer.py\|__init__.py\|error.py"
 """
 
 import argparse

@@ -5,7 +5,7 @@ from typing import List
 @dataclasses.dataclass
 class TrainConfig:
     metamotivo_repo: str = "facebook/metamotivo-M-1"
-    dataset_dir: str = "data/crossenbodiment-1-datasets"
+    dataset_dir: str = "datasets/crossenbodiment-1-datasets"
     target_morphology_json: str = "assets/robots/robot_child_parameter.json"
     target_xml: str = "assets/robots/robot_child.xml"
     device: str = "cpu"

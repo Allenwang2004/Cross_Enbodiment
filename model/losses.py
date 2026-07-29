@@ -50,12 +50,21 @@ def d_root(model, qpos_a: np.ndarray, qpos_b: np.ndarray) -> float:
     yaw_rate_a, yaw_rate_b = _align_length(np.diff(yaw_a), np.diff(yaw_b))
     yaw_rate_err = float(np.mean((yaw_rate_a - yaw_rate_b) ** 2)) if len(yaw_rate_a) else 0.0
 
-    def curvature(traj_xy, min_speed=1e-3):
-        # dheading/speed blows up when the root is nearly stationary (e.g.
-        # crawling/crouching) -- curvature is meaningless there anyway, so
-        # mask those samples out instead of dividing by ~0. Also wrap
-        # dheading to [-pi, pi]: arctan2's branch cut otherwise turns a
-        # small turn crossing +-pi into a fake ~2*pi jump.
+    def curvature(traj_xy, min_speed=1e-3, clip=50.0):
+        # dheading/speed is inherently ill-conditioned as speed -> 0 (e.g.
+        # crawling/crouching, near-stationary root): raising min_speed alone
+        # just moves the blow-up to "slightly above threshold" samples,
+        # since bounded dheading (~pi) over a tiny speed still explodes.
+        # Clip to a fixed physically-sane range instead -- +-50 rad/m
+        # already covers a sharp human U-turn (~pi over ~0.1 m), so no
+        # genuine turning behavior gets clipped, only division-by-~0 noise.
+        # Also wrap dheading to [-pi, pi]: arctan2's branch cut otherwise
+        # turns a small turn crossing +-pi into a fake ~2*pi jump.
+        #
+        # Normalized to [-1, 1] by dividing by clip: curvature's natural
+        # units (rad/m) aren't comparable to heading_err/yaw_rate_err's
+        # (rad^2), so leaving it in raw units would let this one sub-term
+        # dominate D_root by orders of magnitude regardless of weighting.
         v = np.diff(traj_xy, axis=0)
         speed = np.linalg.norm(v, axis=-1)
         heading = np.arctan2(v[:, 1], v[:, 0])
@@ -63,7 +72,7 @@ def d_root(model, qpos_a: np.ndarray, qpos_b: np.ndarray) -> float:
         dheading = (dheading + np.pi) % (2 * np.pi) - np.pi
         valid = speed[:-1] > min_speed
         curv = np.zeros_like(dheading)
-        curv[valid] = dheading[valid] / speed[:-1][valid]
+        curv[valid] = np.clip(dheading[valid] / speed[:-1][valid], -clip, clip) / clip
         return curv, valid
 
     curv_a, valid_a = curvature(root_a[:, :2])
