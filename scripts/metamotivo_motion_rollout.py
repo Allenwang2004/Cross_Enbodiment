@@ -21,14 +21,14 @@ Install (see https://github.com/facebookresearch/metamotivo):
     pip install metamotivo humenv[all] gymnasium mujoco torch imageio h5py
 
 Usage (run from the project root):
-    uv run scripts/metamotivo_rollout.py --z-mode random --num-rollouts 5 --steps 300
-    uv run scripts/metamotivo_rollout.py --z-mode reward --reward-name "move-ego-0-2" --steps 300
-    uv run scripts/metamotivo_rollout.py --tasks-file docs/humenv_all_tasks_official.txt --steps 300
+    uv run scripts/metamotivo_motion_rollout.py --z-mode random --num-rollouts 5 --steps 300
+    uv run scripts/metamotivo_motion_rollout.py --z-mode reward --reward-name "move-ego-0-2" --steps 300
+    uv run scripts/metamotivo_motion_rollout.py --tasks-file docs/humenv_all_tasks_official.txt --steps 300
 
 Batch mode writes qpos to data/origin_motion/<reward_name>/, z to
-data/z/<reward_name>/, and video to outputs/robot_video/ (--data-dir/
+data/z/<reward_name>/, and video to outputs/robot_motion_video/ (--data-dir/
 --out-dir to change either root). Single/random-rollout mode just writes
-rollout_<i>.mp4 under --out-dir (default outputs/robot_video/).
+rollout_<i>.mp4 under --out-dir.
 """
 
 import argparse
@@ -231,7 +231,7 @@ def main():
                               "(each with a fresh random z when --z-mode random)")
     parser.add_argument("--seed", type=int, default=0,
                          help="base seed; rollout i uses seed + i")
-    parser.add_argument("--out-dir", default="outputs/robot_video",
+    parser.add_argument("--out-dir", default="outputs/robot_motion_video",
                          help="directory to write video into (single-rollout "
                               "mode: rollout_<i>.mp4 directly here; "
                               "--tasks-file mode: <reward_name>.mp4 here)")

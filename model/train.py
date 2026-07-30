@@ -45,6 +45,18 @@ the environment, so it's added as a normal backprop term for a much
 lower-variance gradient on that part of the loss. Both paths write into the
 same z_beta leaf tensor and their gradients simply add.
 
+Exploration noise
+------------------
+Actions are sampled from Normal(action_head_output, cfg.exploration_std),
+NOT the frozen model's own actor_std (0.2) -- that std is tuned for
+single-step inference-time behavior, but here it's injected every one of
+300 steps into a MuJoCo rollout, where per-step noise compounds nonlinearly
+through contacts/integration. Empirically (50 updates, batch_size=16) this
+made D/L_phys swing by an order of magnitude update to update with no
+visible trend, i.e. the exploration noise's effect on the trajectory was
+larger than the effect of the adapter actually changing -- the learning
+signal was buried under it. cfg.exploration_std defaults much smaller (0.05).
+
 Batching
 --------
 All cfg.batch_size episodes run in ONE vectorized HumEnv (gymnasium
@@ -131,7 +143,10 @@ def rollout_batch(model, adapter, action_head, env, z0_t, beta_t, cfg):
         raw_mean = dist.mean  # (B, action_dim), differentiable via z_beta
 
         action_mean = action_head(raw_mean, beta_t)
-        action_dist = Normal(action_mean, model.cfg.actor_std)
+        # cfg.exploration_std, not model.cfg.actor_std -- see config.py's comment:
+        # this noise physically compounds over the rollout, so it's kept much
+        # smaller than the frozen model's own (inference-time) actor_std.
+        action_dist = Normal(action_mean, cfg.exploration_std)
         action = action_dist.sample()
         log_prob_sum = log_prob_sum + action_dist.log_prob(action).sum(dim=-1)
 

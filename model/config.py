@@ -32,6 +32,10 @@ class TrainConfig:
     # optimization (REINFORCE with a moving-average baseline; see train.py docstring
     # for why -- the MuJoCo rollout is not autodiff-differentiable)
     lr: float = 3e-4
+    exploration_std: float = 0.05  # std used to SAMPLE actions for REINFORCE (see train.py) --
+                                    # deliberately decoupled from the frozen model's own
+                                    # actor_std (0.2): that noise compounds over 300 MuJoCo
+                                    # steps and was swamping the D/L_phys learning signal
     batch_size: int = 16  # episodes per update, run as one vectorized HumEnv (see train.py)
     vectorization_mode: str = "sync"  # gymnasium VectorEnv mode for the batched rollout
     num_updates: int = 50

@@ -125,8 +125,26 @@ def functional_equivalence(model, qpos_beta: np.ndarray, qpos_ref, weights: dict
     return total, terms
 
 
-def physics_penalty(model, qpos_seq: np.ndarray) -> float:
-    """Joint-limit violation + a crude fall detector, from qpos_seq alone."""
+def physics_penalty(model, qpos_seq: np.ndarray, fall_weight: float = 5.0) -> float:
+    """Joint-limit violation + a graded fall penalty, from qpos_seq alone.
+
+    The fall term used to be a hard threshold (pelvis_z < 50% of its initial
+    height -> a flat +5.0/frame, 0 otherwise). In practice, on the child body
+    the pelvis crosses that line almost immediately in almost every episode
+    (empirically: L_phys sat at ~4.7-4.8 out of a ~5 ceiling for 100 straight
+    updates, barely moving even while D was improving) -- once collapsed,
+    every rollout looked equally "maximally bad" to this term regardless of
+    whether it face-planted immediately or nearly recovered, so it carried no
+    usable gradient once the character was down (which was almost always).
+
+    Replaced with a smooth, continuous term: (1 - height_ratio)^2, where
+    height_ratio = clip(pelvis_z / initial_pelvis_z, 0, 1). This is 0 at full
+    height and 1 flat on the ground, quadratic in between -- "half fallen" and
+    "face-planted" are no longer scored identically, so there's a gradient to
+    follow even in episodes that never regain full height. Kept in the same
+    [0, fall_weight] range as before so lambda_phys/existing checkpoints'
+    scale intuition roughly carries over.
+    """
     penalty = 0.0
     for j in range(model.njnt):
         if model.jnt_type[j] != mujoco.mjtJoint.mjJNT_HINGE:
@@ -140,6 +158,7 @@ def physics_penalty(model, qpos_seq: np.ndarray) -> float:
         penalty += float(np.mean(viol ** 2))
 
     pelvis_z = qpos_seq[:, 2]
-    fell = pelvis_z < (0.5 * qpos_seq[0, 2])
-    penalty += 5.0 * float(np.mean(fell))
+    ref_h = qpos_seq[0, 2]
+    height_ratio = np.clip(pelvis_z / ref_h, 0.0, 1.0)
+    penalty += fall_weight * float(np.mean((1.0 - height_ratio) ** 2))
     return penalty
