@@ -34,7 +34,7 @@ when the body is actually in a standing-like pose. For non-standing clips
 height at rest" and "root height in this specific pose" is NOT the same
 across skeletons whose limb segments are scaled non-uniformly (this repo's
 robot_child.xml scales legs/arms/torso/head independently -- see
-assets/robots/robot_child_parameter.json), so the naive scale alone
+assets/robots/child/parameter.json), so the naive scale alone
 systematically drives the target skeleton's lowest geometry below the floor.
 Measured across all 540 clips in data/retargeted_motion: naive scaling alone
 put 83.7% of clips' mean lowest-point z below -0.01m (vs +0.0065m for the
@@ -57,16 +57,16 @@ legitimately airborne pose down.
 Run with (this repo's own venv):
     python3 scripts/qpos_retarget.py --input_npz <robot_clip.npz> \
         --output_npz <robot_child_clip.npz> \
-        [--source_skeleton_json assets/robots/robot.json] \
-        [--target_skeleton_json assets/robots/robot_child.json] \
-        [--target_xml assets/robots/robot_child.xml]
+        [--source_skeleton_json assets/robots/adult/skeleton.json] \
+        [--target_skeleton_json assets/robots/child/skeleton.json] \
+        [--target_xml assets/robots/child/robot.xml]
 
     # batch mode:
     python3 scripts/qpos_retarget.py --input_dir <robotmotion_dir> \
         --output_dir <robot_child_qpos_dir> \
-        [--source_skeleton_json assets/robots/robot.json] \
-        [--target_skeleton_json assets/robots/robot_child.json] \
-        [--target_xml assets/robots/robot_child.xml]
+        [--source_skeleton_json assets/robots/adult/skeleton.json] \
+        [--target_skeleton_json assets/robots/child/skeleton.json] \
+        [--target_xml assets/robots/child/robot.xml]
 """
 import argparse
 import itertools
@@ -150,9 +150,9 @@ def main():
     parser.add_argument("--output_npz", type=Path)
     parser.add_argument("--input_dir", type=Path)
     parser.add_argument("--output_dir", type=Path)
-    parser.add_argument("--source_skeleton_json", default="assets/robots/robot.json")
-    parser.add_argument("--target_skeleton_json", default="assets/robots/robot_child.json")
-    parser.add_argument("--target_xml", default="assets/robots/robot_child.xml",
+    parser.add_argument("--source_skeleton_json", default="assets/robots/adult/skeleton.json")
+    parser.add_argument("--target_skeleton_json", default="assets/robots/child/skeleton.json")
+    parser.add_argument("--target_xml", default="assets/robots/child/robot.xml",
                          help="target MJCF, used for --ground-correct's forward kinematics")
     parser.add_argument("--ground-correct", dest="ground_correct", action="store_true", default=True,
                          help="per-frame lift the pose so it never sinks below --tolerance (default: on)")

@@ -132,6 +132,13 @@ def rollout_once(model, env, args, seed, z, steps=None, record_video=True):
         obs_t = obs_t.unsqueeze(0)
         with torch.no_grad():
             action = model.act(obs_t, z, mean=True)
+            '''
+            def act(self, obs: torch.Tensor, z: torch.Tensor, mean: bool = True) -> torch.Tensor:
+                dist = self.actor(obs, z, self.cfg.actor_std)
+                if mean:
+                    return dist.mean
+                return dist.sample()
+            '''
         action_np = action.cpu().numpy().ravel()
 
         obs, reward, terminated, truncated, info = env.step(action_np)
@@ -154,7 +161,13 @@ def run_batch(model, env, args):
     rollout writes a qpos-only .npz (trajectory data, for e.g. FBX
     conversion) under --data-dir/origin_motion/ and the z vector used
     (a per-rollout latent, not a per-frame trajectory) under
-    --data-dir/z/."""
+    --data-dir/z/.
+
+    args.z_only skips rollout_once (and hence the qpos .npz/video) entirely:
+    z comes from compute_reward_z(), which only needs a buffer sample + a
+    reward-function relabel, NOT a simulated rollout -- measured ~1.2s/trial
+    vs ~60-90s/trial with a full 300-step rollout. Use this when only z
+    itself is needed (e.g. to grow a task's z library for training)."""
     buffer = load_inference_buffer(args)
 
     reward_names = [
@@ -182,14 +195,19 @@ def run_batch(model, env, args):
         for trial in range(args.rollouts_per_task):
             seed = args.seed + trial
             z = compute_reward_z(model, env, buffer, args, seed, reward_name=reward_name)
+            z_path = task_z_dir / f"{reward_name}_{trial}.npy"
+            np.save(z_path, z.cpu().numpy())
+
+            if args.z_only:
+                print(f"[{task_idx + 1}/{len(reward_names)} {reward_name}] "
+                      f"trial {trial + 1}/{args.rollouts_per_task} -> {z_path}")
+                continue
+
             record_video = trial == 0
             result = rollout_once(model, env, args, seed, z, steps=steps, record_video=record_video)
 
             npz_path = task_npz_dir / f"{reward_name}_{trial}.npz"
             np.savez(npz_path, qpos=result["qpos"])
-
-            z_path = task_z_dir / f"{reward_name}_{trial}.npy"
-            np.save(z_path, z.cpu().numpy())
 
             if record_video:
                 video_path = video_dir / f"{reward_name}.mp4"
@@ -225,6 +243,12 @@ def main():
     parser.add_argument("--relabel-samples", type=int, default=1_000,
                          help="number of buffer transitions used to infer z "
                               "when --z-mode reward / --tasks-file")
+    parser.add_argument("--z-only", action="store_true",
+                         help="--tasks-file mode only: skip the simulated "
+                              "rollout (qpos .npz + video) entirely, only "
+                              "compute and save z -- much faster (~1.2s vs "
+                              "~60-90s per trial) since z-inference doesn't "
+                              "need a rollout")
     parser.add_argument("--steps", type=int, default=300)
     parser.add_argument("--num-rollouts", type=int, default=5,
                          help="number of independent rollouts to run "

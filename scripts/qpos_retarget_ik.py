@@ -33,13 +33,13 @@ the specific, measurable defect found in practice.
 
 Usage (from project root):
     python3 scripts/qpos_retarget_ik.py --input_npz <robot_clip.npz> --output_npz <out.npz> \
-        --source_xml assets/robots/robot.xml --target_xml assets/robots/robot_child.xml \
-        --source_skeleton_json assets/robots/robot.json \
-        --target_skeleton_json assets/robots/robot_child.json
+        --source_xml assets/robots/adult/robot.xml --target_xml assets/robots/child/robot.xml \
+        --source_skeleton_json assets/robots/adult/skeleton.json \
+        --target_skeleton_json assets/robots/child/skeleton.json
 
     # batch mode:
     python3 scripts/qpos_retarget_ik.py --input_dir data/origin_motion --output_dir data/retargeted_motion_ik \
-        --source_xml assets/robots/robot.xml --target_xml assets/robots/robot_child.xml
+        --source_xml assets/robots/adult/robot.xml --target_xml assets/robots/child/robot.xml
 """
 
 import argparse
@@ -190,10 +190,10 @@ def main():
     parser.add_argument("--output_npz", type=Path)
     parser.add_argument("--input_dir", type=Path)
     parser.add_argument("--output_dir", type=Path)
-    parser.add_argument("--source_xml", default="assets/robots/robot.xml")
-    parser.add_argument("--target_xml", default="assets/robots/robot_child.xml")
-    parser.add_argument("--source_skeleton_json", default="assets/robots/robot.json")
-    parser.add_argument("--target_skeleton_json", default="assets/robots/robot_child.json")
+    parser.add_argument("--source_xml", default="assets/robots/adult/robot.xml")
+    parser.add_argument("--target_xml", default="assets/robots/child/robot.xml")
+    parser.add_argument("--source_skeleton_json", default="assets/robots/adult/skeleton.json")
+    parser.add_argument("--target_skeleton_json", default="assets/robots/child/skeleton.json")
     parser.add_argument("--fps", type=float, default=30.0)
     args = parser.parse_args()
 

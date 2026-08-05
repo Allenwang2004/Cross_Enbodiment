@@ -158,7 +158,7 @@ def evaluate(checkpoint_path, tasks_file=None, trials_per_task=None,
         d_total, d_terms = losses.functional_equivalence(
             env.unwrapped.model, episode["qpos_beta"], sample["qpos_ref"], d_weights
         )
-        l_phys = losses.physics_penalty(env.unwrapped.model, episode["qpos_beta"])
+        l_phys, _ = losses.physics_penalty(env.unwrapped.model, episode["qpos_beta"])
 
         per_row.append({
             "reward_name": reward_name, "trial": sample["trial"],

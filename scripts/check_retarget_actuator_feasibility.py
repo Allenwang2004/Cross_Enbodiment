@@ -112,7 +112,7 @@ def check_clip(model, data, dof_idx, forcerange, qpos_seq, dt, smooth_window=5):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--retarget-dir", default="data/retargeted_motion")
-    parser.add_argument("--xml", default="assets/robots/robot_child.xml")
+    parser.add_argument("--xml", default="assets/robots/child/robot.xml")
     parser.add_argument("--fps", type=float, default=30.0)
     parser.add_argument("--infeasible-threshold", type=float, default=1.0,
                          help="headroom below this counts as infeasible (1.0 = exactly at the limit)")

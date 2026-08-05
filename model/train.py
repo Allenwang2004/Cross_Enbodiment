@@ -180,7 +180,7 @@ def compute_batch_cost(fk_model, cfg, qpos_beta, qpos_refs):
     }
     for i in range(B):
         d_total, _ = losses.functional_equivalence(fk_model, qpos_beta[i], qpos_refs[i], d_weights)
-        l_phys = losses.physics_penalty(fk_model, qpos_beta[i])
+        l_phys, _ = losses.physics_penalty(fk_model, qpos_beta[i])
         costs[i] = cfg.lambda_rtg * d_total + cfg.lambda_phys * l_phys
         d_totals[i] = d_total
         l_physes[i] = l_phys

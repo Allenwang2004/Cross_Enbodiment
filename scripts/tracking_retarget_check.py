@@ -121,7 +121,7 @@ def rollout_tracking(model, env, z_track, device, steps, record_video=False):
 
 
 def run(dataset_dir="datasets/crossenbodiment-1-datasets",
-        target_xml="assets/robots/robot_child.xml",
+        target_xml="assets/robots/child/robot.xml",
         metamotivo_repo="facebook/metamotivo-M-1",
         tasks_file=None, trials_per_task=1, steps_per_episode=300,
         out_dir="outputs/tracking_retarget", render_videos=False, device="cuda:0"):
@@ -185,7 +185,7 @@ def run(dataset_dir="datasets/crossenbodiment-1-datasets",
         d_total, d_terms = losses.functional_equivalence(
             env.unwrapped.model, episode["qpos_beta"], sample["qpos_ref"], d_weights
         )
-        l_phys = losses.physics_penalty(env.unwrapped.model, episode["qpos_beta"])
+        l_phys, _ = losses.physics_penalty(env.unwrapped.model, episode["qpos_beta"])
 
         per_row.append({
             "reward_name": reward_name, "trial": trial,
@@ -243,7 +243,7 @@ def run(dataset_dir="datasets/crossenbodiment-1-datasets",
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", default="datasets/crossenbodiment-1-datasets")
-    parser.add_argument("--target-xml", default="assets/robots/robot_child.xml")
+    parser.add_argument("--target-xml", default="assets/robots/child/robot.xml")
     parser.add_argument("--tasks-file", default=None)
     parser.add_argument("--trials-per-task", type=int, default=1)
     parser.add_argument("--steps-per-episode", type=int, default=300)

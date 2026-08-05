@@ -49,3 +49,18 @@ class ActionHead(nn.Module):
     def forward(self, raw_action: torch.Tensor, beta: torch.Tensor) -> torch.Tensor:
         delta = self.mlp(torch.cat([raw_action, beta], dim=-1))
         return raw_action + delta
+
+
+class ActionResidual(nn.Module):
+    """Residual correction on top of the frozen actor's raw action mean, with
+    NO beta conditioning -- for the single-body, no-adapter, kinematics-only
+    exploration experiment (model/train_explore.py) where z is fed to the
+    frozen actor unmodified and there is no morphology descriptor to condition
+    on."""
+
+    def __init__(self, action_dim, hidden_dims=(128, 128)):
+        super().__init__()
+        self.mlp = _mlp(action_dim, list(hidden_dims), action_dim)
+
+    def forward(self, raw_action: torch.Tensor) -> torch.Tensor:
+        return raw_action + self.mlp(raw_action)

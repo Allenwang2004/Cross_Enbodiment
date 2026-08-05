@@ -6,8 +6,8 @@ from typing import List
 class TrainConfig:
     metamotivo_repo: str = "facebook/metamotivo-M-1"
     dataset_dir: str = "datasets/crossenbodiment-1-datasets"
-    target_morphology_json: str = "assets/robots/robot_child_parameter.json"
-    target_xml: str = "assets/robots/robot_child.xml"
+    target_morphology_json: str = "assets/robots/child/parameter.json"
+    target_xml: str = "assets/robots/child/robot.xml"
     device: str = "cuda:0"
 
     # G_theta: z_beta = z0 + alpha * MLP([beta, z0])

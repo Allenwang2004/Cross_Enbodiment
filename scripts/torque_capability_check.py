@@ -29,11 +29,11 @@ motion (no external qpos trajectory is used anywhere in this script).
    well-defined regardless of the free joint) + Kp*(target-qpos) + Kd*(-qvel).
 
 Usage (from project root):
-    uv run scripts/torque_capability_check.py --mode static --xml assets/robots/robot_child.xml
-    uv run scripts/torque_capability_check.py --mode static --xml assets/robots/robot.xml
+    uv run scripts/torque_capability_check.py --mode static --xml assets/robots/child/robot.xml
+    uv run scripts/torque_capability_check.py --mode static --xml assets/robots/adult/robot.xml
 
     uv run scripts/torque_capability_check.py --mode stand \
-        --xml assets/robots/robot_child.xml --seconds 10 \
+        --xml assets/robots/child/robot.xml --seconds 10 \
         --out outputs/torque_check/stand_child
 """
 
@@ -191,7 +191,7 @@ def stand_check(xml_path, out_prefix, kp, kd, seconds, camera="front_side"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["static", "stand"], required=True)
-    parser.add_argument("--xml", default="assets/robots/robot_child.xml")
+    parser.add_argument("--xml", default="assets/robots/child/robot.xml")
     parser.add_argument("--out", default=None, help="required for --mode stand: output path prefix")
     parser.add_argument("--seconds", type=float, default=10.0, help="--mode stand duration")
     parser.add_argument("--kp", type=float, default=300.0)

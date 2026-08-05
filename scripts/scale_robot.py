@@ -1,5 +1,5 @@
 """
-Generate a scaled variant of assets/robots/robot.xml with independent
+Generate a scaled variant of assets/robots/adult/robot.xml with independent
 per-body-group scale factors: legs / arms / torso / head, each with its own
 length scale and girth (thickness) scale. Body/joint/actuator names and gear
 ratios are untouched, so the pretrained Meta Motivo model still works on the
@@ -10,23 +10,34 @@ forward-kinematics pass so the feet still rest at ground level (z=0) in the
 default pose -- otherwise a taller/shorter skeleton would float or clip
 through the floor.
 
+Each body lives in its own folder: assets/robots/<label>/robot.xml +
+assets/robots/<label>/parameter.json.
+
 Presets:
-    baseline  -- identity (scale=1.0 everywhere). Doesn't touch robot.xml
-                 itself, just writes robot.json with the identity params so
-                 every body variant has a matching metadata file.
+    adult     -- identity (scale=1.0 everywhere). Doesn't touch
+                 adult/robot.xml itself, just writes adult/parameter.json
+                 with the identity params so every body variant has a
+                 matching metadata file.
     child     -- proportionally shorter limbs/torso, slightly bigger head,
                  thinner limbs.
     elderly   -- slightly shorter stature, thinner limbs, thicker torso.
 These are rough illustrative defaults -- override any axis from the CLI.
 
+By default the actuator gain/bias/force-range are rescaled per joint by its
+own load ratio (see compute_joint_loads/apply_scale below) so a smaller body
+isn't driven by comically oversized torque. Pass --no-actuator-scale to skip
+that entirely and copy robot.xml's actuators verbatim -- e.g. when the point
+of the experiment is to isolate "can this body shape alone (same raw
+actuator strength as the adult) perform the motion" from actuator retuning.
+
 Usage (from project root):
-    uv run scripts/scale_robot.py --preset baseline
+    uv run scripts/scale_robot.py --preset adult
     uv run scripts/scale_robot.py --preset child
     uv run scripts/scale_robot.py --preset elderly
     uv run scripts/scale_robot.py --label custom --leg-scale 1.1 --leg-girth 0.9
+    uv run scripts/scale_robot.py --label custom --leg-scale 1.1 --no-actuator-scale
 
-Writes assets/robots/robot_<label>.xml and assets/robots/robot_<label>_parameter.json
-(or assets/robots/robot_parameter.json for the baseline, since robot.xml already exists).
+Writes assets/robots/<label>/robot.xml and assets/robots/<label>/parameter.json.
 """
 
 import argparse
@@ -42,7 +53,7 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROBOTS_DIR = REPO_ROOT / "assets" / "robots"
-SOURCE_XML = ROBOTS_DIR / "robot.xml"
+SOURCE_XML = ROBOTS_DIR / "adult" / "robot.xml"
 
 BODY_GROUPS = {
     "leg": ["L_Hip", "L_Knee", "L_Ankle", "L_Toe", "R_Hip", "R_Knee", "R_Ankle", "R_Toe"],
@@ -57,8 +68,8 @@ AXES = ["leg_scale", "arm_scale", "torso_scale", "head_scale",
         "leg_girth", "arm_girth", "torso_girth", "head_girth"]
 
 PRESETS = {
-    "baseline": dict(leg_scale=1.00, arm_scale=1.00, torso_scale=1.00, head_scale=1.00,
-                      leg_girth=1.00, arm_girth=1.00, torso_girth=1.00, head_girth=1.00),
+    "adult": dict(leg_scale=1.00, arm_scale=1.00, torso_scale=1.00, head_scale=1.00,
+                  leg_girth=1.00, arm_girth=1.00, torso_girth=1.00, head_girth=1.00),
     # Children: proportionally shorter legs/arms/torso, slightly bigger &
     # rounder head, thinner limbs.
     "child": dict(leg_scale=0.62, arm_scale=0.65, torso_scale=0.75, head_scale=1.05,
@@ -151,7 +162,7 @@ def _resolve_stiffness(joint):
     return _DEFAULT_JOINT_STIFFNESS[joint.get("class")]
 
 
-def apply_scale(tree, params, source_xml=SOURCE_XML):
+def apply_scale(tree, params, source_xml=SOURCE_XML, scale_actuators=True):
     root = tree.getroot()
 
     n_geoms_touched = 0
@@ -233,6 +244,9 @@ def apply_scale(tree, params, source_xml=SOURCE_XML):
                 joint.set("damping", f"{float(joint.get('damping')) * local_scale:.6g}")
             armature = float(joint.get("armature", _DEFAULT_JOINT_ARMATURE)) * local_scale
             joint.set("armature", f"{armature:.6g}")
+
+    if not scale_actuators:
+        return
 
     # Actuators: find each <general> actuator's owning joint, then scale
     # gain/bias/force-limit by that joint's OWN load ratio (see
@@ -316,9 +330,9 @@ def measure_min_z(xml_string):
     return min_z
 
 
-def generate(label, params, source_xml=SOURCE_XML, out_dir=ROBOTS_DIR):
+def generate(label, params, source_xml=SOURCE_XML, out_dir=ROBOTS_DIR, scale_actuators=True):
     tree = ET.parse(source_xml)
-    apply_scale(tree, params, source_xml=source_xml)
+    apply_scale(tree, params, source_xml=source_xml, scale_actuators=scale_actuators)
 
     # Feet exactly flush with the ground (gap = 0) in the default pose.
     xml_string = ET.tostring(tree.getroot(), encoding="unicode")
@@ -328,16 +342,18 @@ def generate(label, params, source_xml=SOURCE_XML, out_dir=ROBOTS_DIR):
             x, y, z = (float(v) for v in body.get("pos").split())
             body.set("pos", f"{x:.6g} {y:.6g} {z + dz:.6g}")
 
-    out_xml = out_dir / f"robot_{label}.xml"
+    body_dir = out_dir / label
+    body_dir.mkdir(parents=True, exist_ok=True)
+
+    out_xml = body_dir / "robot.xml"
     tree.write(out_xml)
 
-    # NOT robot_{label}.json -- that name is owned by the skeleton-export
-    # schema (bodies/world_pos/mass list, from
-    # mujoco_Humanoid_motionretargeting/scripts/export_skeleton_json.py),
-    # a completely different file consumed by qpos_retarget.py. This is the
-    # flat scale-factor schema instead (see model/dataset.py's BETA_AXES).
-    out_json = out_dir / f"robot_{label}_parameter.json"
-    out_json.write_text(json.dumps({"label": label, **params}, indent=2) + "\n")
+    # parameter.json is the flat scale-factor schema (see model/dataset.py's
+    # BETA_AXES) -- NOT the skeleton-export schema (bodies/world_pos/mass
+    # list, from mujoco_Humanoid_motionretargeting/scripts/
+    # export_skeleton_json.py), which lives alongside it as skeleton.json.
+    out_json = body_dir / "parameter.json"
+    out_json.write_text(json.dumps({"label": label, "scale_actuators": scale_actuators, **params}, indent=2) + "\n")
 
     print(f"wrote {out_xml}")
     print(f"wrote {out_json}")
@@ -348,8 +364,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--preset", choices=list(PRESETS), default=None)
     parser.add_argument("--label", default=None,
-                         help="output name -> robot_<label>.xml/.json "
+                         help="output folder name -> assets/robots/<label>/robot.xml+parameter.json "
                               "(defaults to --preset name)")
+    parser.add_argument("--no-actuator-scale", action="store_true",
+                         help="copy robot.xml's actuators verbatim instead of rescaling "
+                              "gain/bias/force-range by per-joint load ratio")
     for axis in AXES:
         parser.add_argument(f"--{axis.replace('_', '-')}", type=float, default=None,
                              help=f"override this preset's {axis}")
@@ -358,23 +377,24 @@ def main():
     if args.preset is None and args.label is None:
         parser.error("pass --preset or --label")
 
-    params = dict(PRESETS[args.preset] if args.preset else PRESETS["baseline"])
+    params = dict(PRESETS[args.preset] if args.preset else PRESETS["adult"])
     label = args.label or args.preset
     for axis in AXES:
         cli_val = getattr(args, axis.replace("-", "_"))
         if cli_val is not None:
             params[axis] = cli_val
 
-    if label == "baseline" and all(params[a] == 1.0 for a in AXES):
-        # robot.xml already exists and is untouched -- just record its
-        # (identity) morphology params next to it. NOT robot.json -- see the
-        # comment above generate()'s out_json, same schema collision.
-        out_json = ROBOTS_DIR / "robot_parameter.json"
-        out_json.write_text(json.dumps({"label": "baseline", **params}, indent=2) + "\n")
-        print(f"wrote {out_json} (robot.xml left untouched)")
+    if label == "adult" and all(params[a] == 1.0 for a in AXES):
+        # adult/robot.xml already exists and is untouched -- just record its
+        # (identity) morphology params next to it.
+        body_dir = ROBOTS_DIR / "adult"
+        body_dir.mkdir(parents=True, exist_ok=True)
+        out_json = body_dir / "parameter.json"
+        out_json.write_text(json.dumps({"label": "adult", "scale_actuators": True, **params}, indent=2) + "\n")
+        print(f"wrote {out_json} (adult/robot.xml left untouched)")
         return
 
-    generate(label, params)
+    generate(label, params, scale_actuators=not args.no_actuator_scale)
 
 
 if __name__ == "__main__":

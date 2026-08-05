@@ -74,8 +74,8 @@ def _mat_to_quat(xmat_flat):
 
 def main():
     parser = argparse.ArgumentParser(description="Dump MJCF rest-pose world transforms to JSON.")
-    parser.add_argument("--input", default="assets/robots/robot.xml")
-    parser.add_argument("--output", default="assets/robots/robot.json")
+    parser.add_argument("--input", default="assets/robots/adult/robot.xml")
+    parser.add_argument("--output", default="assets/robots/adult/skeleton.json")
     args = parser.parse_args()
     dump_skeleton(args.input, args.output)
 

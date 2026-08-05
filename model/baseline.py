@@ -67,7 +67,7 @@ def rollout_baseline(model, env, reward_fn, z0_t, device, steps_per_episode, rec
 
 
 def run_baseline(dataset_dir="datasets/crossenbodiment-1-datasets",
-                  target_xml="assets/robots/robot_child.xml",
+                  target_xml="assets/robots/child/robot.xml",
                   metamotivo_repo="facebook/metamotivo-M-1",
                   tasks_file=None, trials_per_task=None, steps_per_episode=300,
                   out_dir="outputs/baseline", render_videos=False, device="cuda:0"):
@@ -119,7 +119,7 @@ def run_baseline(dataset_dir="datasets/crossenbodiment-1-datasets",
         d_total, d_terms = losses.functional_equivalence(
             env.unwrapped.model, episode["qpos_beta"], sample["qpos_ref"], d_weights
         )
-        l_phys = losses.physics_penalty(env.unwrapped.model, episode["qpos_beta"])
+        l_phys, _ = losses.physics_penalty(env.unwrapped.model, episode["qpos_beta"])
 
         per_row.append({
             "reward_name": reward_name, "trial": sample["trial"],
@@ -179,7 +179,7 @@ def run_baseline(dataset_dir="datasets/crossenbodiment-1-datasets",
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", default="datasets/crossenbodiment-1-datasets")
-    parser.add_argument("--target-xml", default="assets/robots/robot_child.xml")
+    parser.add_argument("--target-xml", default="assets/robots/child/robot.xml")
     parser.add_argument("--tasks-file", default=None,
                          help="defaults to the held-out test split if "
                               "scripts/split_tasks.py has been run, else "

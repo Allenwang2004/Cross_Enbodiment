@@ -24,7 +24,7 @@ for i, task in enumerate(tasks):
         missing.append(task)
         continue
     qpos = np.load(npz_path)["qpos"]
-    frames = render_qpos("assets/robots/robot_child.xml", qpos)
+    frames = render_qpos("assets/robots/child/robot.xml", qpos)
     out_path = out_dir / f"{task}.mp4"
     imageio.mimsave(out_path, frames, fps=30)
     print(f"[{i+1}/{len(tasks)}] {task}: {len(frames)} frames -> {out_path}")

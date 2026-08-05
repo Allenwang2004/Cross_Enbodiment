@@ -28,7 +28,7 @@ matching humenv's HumEnv.step so 1 iteration = 1 recorded frame @ 30fps).
 
 Usage (from project root):
     uv run scripts/pd_track_retarget.py --qpos data/retargeted_motion/crawl-0.4-0-d_0.npz \
-        --xml assets/robots/robot_child.xml --out outputs/pd_track/crawl-0.4-0-d_0
+        --xml assets/robots/child/robot.xml --out outputs/pd_track/crawl-0.4-0-d_0
 """
 
 import argparse
@@ -75,7 +75,7 @@ def targets_to_ctrl(qpos_target_frame, qpos_idx, gain, bias0, bias1, ctrlrange):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--qpos", required=True, help="retargeted qpos .npz (key 'qpos'), joint angles used as PD targets")
-    parser.add_argument("--xml", default="assets/robots/robot_child.xml")
+    parser.add_argument("--xml", default="assets/robots/child/robot.xml")
     parser.add_argument("--out", required=True, help="output path prefix (no extension)")
     parser.add_argument("--camera", default="front_side")
     args = parser.parse_args()

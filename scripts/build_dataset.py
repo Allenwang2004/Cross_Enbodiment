@@ -1,24 +1,26 @@
 """
 Build datasets/crossenbodiment-1-datasets from what's already generated.
-Each row (indexed by reward_name/trial, enumerated from
-data/origin_motion/) bundles:
+Each row (indexed by reward_name/trial, enumerated from data/z/ -- the only
+field every row must have, see CrossEmbodimentDataset) bundles:
   - origin_z          the z latent used for that rollout
                        (data/z/<reward_name>/<reward_name>_<trial>.npy)
   - retargeted_motion  the origin qpos trajectory retargeted onto the target
                        body via scripts/qpos_retarget.py
                        (data/retargeted_motion/<reward_name>_<trial>.npz)
-                       -- 1:1 matched with the origin rollout by filename, so
-                       every row gets one.
+                       -- optional, None if missing (e.g. rows produced by
+                       scripts/metamotivo_motion_rollout.py --z-only, which
+                       skips the qpos rollout entirely and so never has one).
   - morphology         body-shape scale parameters -- currently fixed to
-                       assets/robots/robot_child_parameter.json for every
+                       assets/robots/child/parameter.json for every
                        row, even though the origin rollout was generated on
                        the baseline body. That mismatch is intentional per
                        current instructions, not a bug -- just be aware of
                        it before training on this.
 
 origin_motion (the un-retargeted qpos) is intentionally NOT included in the
-built dataset -- it only exists as an intermediate used to produce
-retargeted_motion and origin_z, both of which are already in the manifest.
+built dataset -- when present, it only exists as an intermediate used to
+produce retargeted_motion and origin_z, both of which are already in the
+manifest.
 
 This only builds a manifest + copies files into a self-contained dataset
 folder; it does not regenerate any rollouts or retargeting.
@@ -57,10 +59,10 @@ def _copy_or_link(src: Path, dst: Path, mode: str):
 
 
 def build(mode="copy"):
-    if not NPZ_DIR.exists():
+    if not Z_DIR.exists():
         raise SystemExit(
-            f"{NPZ_DIR} not found -- run "
-            "scripts/metamotivo_rollout.py --tasks-file ... first"
+            f"{Z_DIR} not found -- run "
+            "scripts/metamotivo_motion_rollout.py --tasks-file ... first"
         )
 
     DATASET_DIR.mkdir(parents=True, exist_ok=True)
@@ -71,16 +73,16 @@ def build(mode="copy"):
     rows = []
     row_id = 0
     n_missing_retarget = 0
-    for task_dir in sorted(NPZ_DIR.iterdir()):
+    # Enumerated from Z_DIR (origin_z is the only field every row must have --
+    # see CrossEmbodimentDataset, which never requires origin_motion) rather
+    # than NPZ_DIR, since --z-only rollouts (scripts/metamotivo_motion_rollout.py)
+    # only ever produce a z, no qpos .npz.
+    for task_dir in sorted(Z_DIR.iterdir()):
         if not task_dir.is_dir():
             continue
         reward_name = task_dir.name
-        for npz_path in sorted(task_dir.glob(f"{reward_name}_*.npz")):
-            trial = int(npz_path.stem.rsplit("_", 1)[-1])
-            z_path = Z_DIR / reward_name / f"{reward_name}_{trial}.npy"
-            if not z_path.exists():
-                print(f"WARNING: missing z for {npz_path}, skipping")
-                continue
+        for z_path in sorted(task_dir.glob(f"{reward_name}_*.npy")):
+            trial = int(z_path.stem.rsplit("_", 1)[-1])
 
             origin_z_dst = DATASET_DIR / "origin_z" / reward_name / z_path.name
             _copy_or_link(z_path, origin_z_dst, mode)

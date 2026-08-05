@@ -9,18 +9,18 @@ raw qpos.
 Usage (from project root):
     # just see what z looks like, no comparison
     uv run scripts/infer_z_from_qpos.py --qpos data/origin_motion/crawl-0.4-0-d/crawl-0.4-0-d_0.npz \
-        --xml assets/robots/robot.xml
+        --xml assets/robots/adult/robot.xml
 
     # compare against the z that actually generated this motion
     uv run scripts/infer_z_from_qpos.py --qpos data/origin_motion/move-ego--90-2/move-ego--90-2_0.npz \
-        --xml assets/robots/robot.xml \
+        --xml assets/robots/adult/robot.xml \
         --z0 data/z/move-ego--90-2/move-ego--90-2_0.npy \
         --out outputs/z_infer/move-ego--90-2_0
 
     # same motion, but retargeted onto a different body -- see how much
     # cross-embodiment inference degrades vs the same-body case above
     uv run scripts/infer_z_from_qpos.py --qpos data/retargeted_motion/move-ego--90-2_0.npz \
-        --xml assets/robots/robot_child.xml \
+        --xml assets/robots/child/robot.xml \
         --z0 data/z/move-ego--90-2/move-ego--90-2_0.npy \
         --out outputs/z_infer/move-ego--90-2_0_child
 
