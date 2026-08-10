@@ -1,0 +1,12 @@
+{
+  "label": "giant",
+  "scale_actuators": true,
+  "leg_scale": 1.25,
+  "arm_scale": 1.25,
+  "torso_scale": 1.2,
+  "head_scale": 1.05,
+  "leg_girth": 1.15,
+  "arm_girth": 1.15,
+  "torso_girth": 1.15,
+  "head_girth": 1.05
+}

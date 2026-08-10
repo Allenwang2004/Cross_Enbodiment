@@ -1,0 +1,14 @@
+{
+  "label": "pear_shaped",
+  "split": "train",
+  "scale_actuators": "calibrated",
+  "leg_scale": 1.0,
+  "arm_scale": 0.95,
+  "torso_scale": 1.0,
+  "head_scale": 1.0,
+  "leg_girth": 1.2,
+  "arm_girth": 0.85,
+  "torso_girth": 0.95,
+  "head_girth": 1.0,
+  "actuator_scale_median": 1.6472311480293875
+}

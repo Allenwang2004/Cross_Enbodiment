@@ -1,4 +1,20 @@
-"""
+"""DEPRECATED -- the bilevel path does not use this script.
+
+model/bilevel/data.py reads data/origin_motion/, data/z/ and
+assets/robots_calib/*/parameter.json directly: no manifest, no build step, and
+no 78 MB duplicate on disk. Two of this script's premises are also gone:
+
+  - `retargeted_motion` has been REMOVED (retargeting is now a runtime,
+    differentiable function of phi -- that is the whole point of the redesign),
+    so the files it copies and the manifest key it writes no longer exist.
+    Regenerate them with scripts/qpos_retarget.py first if you want them back.
+  - MORPHOLOGY_SRC at :44 points at assets/robots/robot_child_parameter.json,
+    which the 9495329 asset restructure removed, so a fresh run crashes there.
+
+Kept only so the legacy model/train.py baseline can be reconstituted.
+
+Original description
+--------------------
 Build datasets/crossenbodiment-1-datasets from what's already generated.
 Each row (indexed by reward_name/trial, enumerated from data/z/ -- the only
 field every row must have, see CrossEmbodimentDataset) bundles:

@@ -73,6 +73,13 @@ ending early mid-rollout just resets that slot and keeps stepping; we don't
 special-case it since cfg.steps_per_episode is short enough that this is rare
 and losing part of one sub-episode to a reset boundary doesn't bias the batch).
 
+NOTE (added after the bilevel redesign): the pre-baked retargeted_motion has
+been REMOVED from datasets/crossenbodiment-1-datasets, so qpos_ref is now None
+for every row and the D term below is identically zero unless you regenerate it
+(model/dataset.py's docstring says how). This script is kept as the documented
+baseline, not as a live training path -- model/bilevel/train_bilevel.py
+supersedes it.
+
 qpos_ref (retargeted_motion) is produced by scripts/qpos_retarget.py, which
 retargets each origin_motion trajectory directly onto the same
 robot_<label>.xml skeleton used for the live rollout (target_xml in

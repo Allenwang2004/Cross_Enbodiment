@@ -1,0 +1,14 @@
+{
+  "label": "short_stocky",
+  "scale_actuators": "calibrated",
+  "leg_scale": 0.85,
+  "arm_scale": 0.88,
+  "torso_scale": 0.92,
+  "head_scale": 1.0,
+  "leg_girth": 1.25,
+  "arm_girth": 1.25,
+  "torso_girth": 1.3,
+  "head_girth": 1.05,
+  "actuator_scale_median": 58.401861141342145,
+  "split": "test"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "elderly",
+  "leg_scale": 0.92,
+  "arm_scale": 0.97,
+  "torso_scale": 0.95,
+  "head_scale": 1.0,
+  "leg_girth": 0.8,
+  "arm_girth": 0.78,
+  "torso_girth": 1.08,
+  "head_girth": 1.0,
+  "scale_actuators": "calibrated",
+  "actuator_scale_median": 5.491757036971836,
+  "split": "train"
+}

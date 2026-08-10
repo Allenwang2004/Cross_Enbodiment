@@ -1,6 +1,26 @@
 """Reads datasets/crossenbodiment-1-datasets/manifest.jsonl (see
-scripts/build_dataset.py). retargeted_motion is optional per row -- rows
-without it yet just get D=0 during training (see losses.functional_equivalence)."""
+scripts/build_dataset.py).
+
+NOTE -- retargeted_motion has been REMOVED from this dataset.
+The bilevel system (model/bilevel/) produces the reference motion at runtime as
+a differentiable function of phi, so a pre-baked copy is not just redundant, it
+is the thing the design exists to replace. The 540 baked .npz files (78 MB here
+plus 78 MB in data/) were deleted along with the manifest field.
+
+Consequence for this LEGACY path: __getitem__ now always returns
+qpos_ref=None, so losses.functional_equivalence returns 0.0 and the D term in
+model/train.py's objective is identically zero. What remains being optimized is
+lambda_z * ||z_beta - z0||^2 + lambda_phys * L_phys. That is a real change to
+the baseline's behaviour, and the constructor says so out loud rather than
+letting the loss quietly collapse (990 of the original 1530 rows already had
+retargeted_motion=None, so a silent D=0 was always easy to miss here).
+
+To run the old baseline as it was, regenerate the references first:
+    uv run scripts/qpos_retarget.py --input_dir data/origin_motion \\
+        --output_dir data/retargeted_motion \\
+        --target_xml assets/robots/child/robot.xml
+    uv run scripts/build_dataset.py
+"""
 
 import json
 from pathlib import Path
@@ -44,6 +64,16 @@ class CrossEmbodimentDataset:
         if not self.rows:
             raise ValueError(f"no rows in {manifest_path} (after task_filter)")
 
+        if not any(r.get("retargeted_motion") for r in self.rows):
+            print(
+                "WARNING: this dataset has no retargeted_motion -- it was removed in favour of "
+                "model/bilevel's runtime retargeting.\n"
+                "         qpos_ref will be None for every row, so functional_equivalence "
+                "returns 0.0 and the\n"
+                "         D term of model/train.py's loss is identically zero. See this "
+                "module's docstring to regenerate."
+            )
+
     def __len__(self):
         return len(self.rows)
 
@@ -52,9 +82,12 @@ class CrossEmbodimentDataset:
         z0 = np.load(self.dataset_dir / row["origin_z"]).reshape(-1).astype(np.float32)
         beta = load_beta(self.dataset_dir / row["morphology"])
 
+        # Kept as an optional field so an older manifest (or a regenerated one)
+        # still works; the current dataset has none, see the module docstring.
         qpos_ref = None
-        if row["retargeted_motion"] is not None:
-            qpos_ref = np.load(self.dataset_dir / row["retargeted_motion"])["qpos"]
+        rel = row.get("retargeted_motion")
+        if rel:
+            qpos_ref = np.load(self.dataset_dir / rel)["qpos"]
 
         return {
             "reward_name": row["reward_name"],
