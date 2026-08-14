@@ -1,4 +1,4 @@
-"""Lower-level policy psi = LatentAdapter + ActionHead + RootWrenchHead,
+"""Lower-level policy phi = LatentAdapter + ActionHead + RootWrenchHead,
 wrapped around the frozen Meta Motivo FB-CPR actor.
 
 Action space is 75-dim: 69 joint ctrl + a 6-DoF root wrench. Everything is

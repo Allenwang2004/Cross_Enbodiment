@@ -1,6 +1,0 @@
-W&B: https://wandb.ai/ziyiw1930-academia-sinica/crossenbodiment-bilevel/runs/63cdy7bp
-
-[00000] r=0.546 r_track=0.499 pose_err=0.168 term=0.98 | G=1.798 S=1.047 C=1.366 illegal=0.958 sat=0.00 | 1.44s/it
-
-interrupted at iteration 11, saved -> /home/allen19/crossenbodiment/model/bilevel/checkpoints/stage1_000011.pt
-resume with: uv run model/bilevel/train_bilevel.py --stage 1 --resume auto

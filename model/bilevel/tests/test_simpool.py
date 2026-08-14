@@ -79,7 +79,7 @@ def main():
         # ---------------- correctness on one window ----------------------
         ci, bi, t0 = ds.sample(cfg.n_envs, rng, body_idx=assign)
         batch = ds.build_batch(ci, bi, t0)
-        # phi = 0 retarget: root scaled by the rest-height ratio, hinges copied.
+        # p = 0 retarget: root scaled by the rest-height ratio, hinges copied.
         ref = batch["src_qpos"][:, : H + 1].copy()
         for i, b in enumerate(bi):
             ref[i, :, 0:3] *= ds.bodies[b].rest_h / ds.source.rest_h

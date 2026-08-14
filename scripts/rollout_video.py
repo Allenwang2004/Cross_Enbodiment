@@ -135,7 +135,7 @@ def main():
     print(f"clip       : {args.task} trial {args.trial}  "
           f"{T} steps @ 30 Hz = {T/30:.1f} s")
     print(f"wrench     : {args.wrench:.0%} of the training crutch")
-    print(f"u (phi)    : absmax {float(u.abs().max()):.4f}, "
+    print(f"u (p)    : absmax {float(u.abs().max()):.4f}, "
           f"dz_root {float(rt.params(u)['root_dz'][0]):+.5f} m\n")
 
     spec.model.opt.timestep = cfg.physics_dt

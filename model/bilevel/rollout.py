@@ -1,7 +1,7 @@
 """Collect one on-policy batch: 256 windows x 24 steps.
 
 Owns everything that has to happen in the main process:
-  - turning the current phi into a concrete reference window per body group
+  - turning the current p into a concrete reference window per body group
   - RSI noise sampling (here, not in the workers, so it is seedable and can be
     shared byte-for-byte between the members of an antithetic ES pair)
   - the CRN action-noise tensor (same reason -- see upper.py)
@@ -10,7 +10,7 @@ Owns everything that has to happen in the main process:
   - masking everything after a termination out of the batch
 
 The reference used for SIMULATION is detached. upper.py recomputes it with a
-live graph when it needs dF/dphi; that recomputation is one torch FK on
+live graph when it needs dF/dp; that recomputation is one torch FK on
 (256, 25, 76) and is far cheaper than holding a 24-step autograd graph across
 a process boundary that has no gradient anyway.
 """
@@ -80,7 +80,7 @@ class Collector:
     # ------------------------------------------------------------------ reference
 
     def build_reference(self, batch: Dict[str, np.ndarray], u_per_env: torch.Tensor):
-        """phi -> the concrete (n_envs, H+1, 76) reference window, detached.
+        """p -> the concrete (n_envs, H+1, 76) reference window, detached.
 
         `u_per_env` is (n_envs, 36), NOT one u per body. Antithetic ES needs the
         plus and minus members of a pair to run inside the SAME iteration on
@@ -153,6 +153,10 @@ class Collector:
         done_b = torch.zeros(H, n, device=dev)
         valid_b = torch.zeros(H, n, device=dev)
         qpos_b = torch.empty(H, n, 76, device=dev)
+        # (H+1, n, 76): the RSI state followed by the state after each control
+        # step. amp.py needs consecutive PAIRS, so the pre-first-step state has
+        # to be kept -- qpos_b alone is missing t=0's left-hand side.
+        qpos_all = torch.empty(H + 1, n, 76, device=dev)
 
         alive = torch.ones(n, device=dev)
 
@@ -163,6 +167,7 @@ class Collector:
             return qp, qv, ob
 
         qp, qv, ob = read_state()
+        qpos_all[0] = qp
 
         for t in range(H):
             rf = root_features(qp, qv)
@@ -202,6 +207,7 @@ class Collector:
             done_b[t] = step_done * alive
             qp, qv, ob = read_state()
             qpos_b[t] = qp
+            qpos_all[t + 1] = qp
             alive = alive * (1.0 - done_b[t])
 
         with torch.no_grad():
@@ -213,7 +219,7 @@ class Collector:
         return {
             "obs": obs_b, "action": act_b, "logp": logp_b, "value": val_b,
             "raw_prior": prior_b, "root_feats": rootf_b, "terms": terms_b,
-            "done": done_b, "valid": valid_b, "qpos": qpos_b,
+            "done": done_b, "valid": valid_b, "qpos": qpos_b, "qpos_all": qpos_all,
             "beta": beta, "z0": z0, "z_beta": z_beta,
             "ref": torch.as_tensor(ref, dtype=torch.float64, device=dev),
             "src_qpos": torch.as_tensor(batch["src_qpos"], dtype=torch.float64, device=dev),

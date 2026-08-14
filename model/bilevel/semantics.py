@@ -1,6 +1,6 @@
-"""The two purely-phi terms of the upper objective: S (fidelity) and C (feasibility).
+"""The two purely-p terms of the upper objective: S (fidelity) and C (feasibility).
 
-Both depend on phi ONLY through the reference -- never through the simulator --
+Both depend on p ONLY through the reference -- never through the simulator --
 so their gradients are exact and zero-variance. Together with the hard tanh box
 in retarget.py they are what stops the upper level from collapsing.
 
@@ -118,11 +118,11 @@ class UpperGeometry:
 
 def weighted_sum(cfg, terms: Dict[str, torch.Tensor],
                  scales: Optional[Dict[str, float]] = None) -> torch.Tensor:
-    """Sum w_k * term_k / scale_k, where scale_k is the term's value at phi = 0.
+    """Sum w_k * term_k / scale_k, where scale_k is the term's value at p = 0.
 
-    Normalizing by the phi=0 baseline is what makes the weights in
+    Normalizing by the p=0 baseline is what makes the weights in
     BilevelConfig mean what they say. Without it the raw magnitudes span six
-    orders of magnitude -- measured at phi=0 on `child`:
+    orders of magnitude -- measured at p=0 on `child`:
 
         c_limit  9.7e-04     <- the term encoding the 95.8%-illegal finding
         c_slide  5.6e-01
@@ -131,8 +131,8 @@ def weighted_sum(cfg, terms: Dict[str, torch.Tensor],
     so a nominal 4:1 priority for c_limit over c_slide was in reality 1:140,
     and the upper level would have spent its entire budget smoothing.
 
-    It also makes the Stage 2 gate directly readable: S is 1.0 at phi=0 by
-    construction, so "S(ref_phi) < 2 * S(ref_0)" is literally "S < 2".
+    It also makes the Stage 2 gate directly readable: S is 1.0 at p=0 by
+    construction, so "S(ref_p) < 2 * S(ref_0)" is literally "S < 2".
     """
     total = None
     for k, v in terms.items():
@@ -148,9 +148,9 @@ def semantic_fidelity(
     ee_limb_len: torch.Tensor, src_ee_limb_len: torch.Tensor,
     leg_len: float, src_leg_len: float,
 ) -> Dict[str, torch.Tensor]:
-    """S(ref_phi, src) raw terms. Exact gradient w.r.t. phi.
+    """S(ref_p, src) raw terms. Exact gradient w.r.t. p.
 
-    Combine with weighted_sum(); the caller owns the phi=0 normalization.
+    Combine with weighted_sum(); the caller owns the p=0 normalization.
     """
     dt = cfg.dt
 
@@ -162,7 +162,7 @@ def semantic_fidelity(
     e_src = src_geo.ee_relative() / src_ee_limb_len.view(1, 1, -1, 1)
     d_reach = (e_ref - e_src).pow(2).sum(-1).mean()
 
-    # 3. contact pattern -- the workhorse. If phi shrinks amplitudes or drops the
+    # 3. contact pattern -- the workhorse. If p shrinks amplitudes or drops the
     #    root, foot-off/foot-strike timing shifts and this fires immediately.
     p_ref = contact_signal(ref_geo.foot_height(), ref_geo.foot_rest_z, cfg.s_contact_k)
     c_src = contact_signal(src_geo.foot_height(), src_geo.foot_rest_z, cfg.s_contact_k).detach()
@@ -184,7 +184,7 @@ def reference_feasibility(
     cfg, kin: TorchKinematics, ref_raw: torch.Tensor, ref_geo: UpperGeometry,
     src_geo: UpperGeometry, leg_len: float = 1.0,
 ) -> Dict[str, torch.Tensor]:
-    """C(ref_raw, beta) raw terms. Exact gradient w.r.t. phi.
+    """C(ref_raw, beta) raw terms. Exact gradient w.r.t. p.
 
     `ref_raw` must be the PRE-CLAMP reference (see module docstring).
     """
@@ -228,8 +228,9 @@ def reference_feasibility(
 
 def gap(
     cfg, kin: TorchKinematics, rollout_qpos: torch.Tensor, ref_geo: UpperGeometry,
+    valid: Optional[torch.Tensor] = None,
 ) -> Dict[str, torch.Tensor]:
-    """G(tau, ref_phi): what new.md asks the upper level to measure.
+    """G(tau, ref_p): what new.md asks the upper level to measure.
 
     `rollout_qpos` is the realized trajectory and is treated as a CONSTANT --
     MuJoCo is not differentiable, so the only gradient this contributes is the
@@ -238,6 +239,19 @@ def gap(
 
     Scored against the CLAMPED reference: the robot cannot be blamed for failing
     to reach an angle its own actuators cannot command.
+
+    `valid` (B, H) MUST be supplied for anything that feeds a gradient. A
+    terminated slot is frozen by the worker, which leaves its last live qpos
+    repeating in the buffer for the rest of the window -- so an unmasked mean
+    scores "a corpse on the floor" against "the reference still mid-jump" for
+    every step after the fall. That is not merely noise: it is a systematic pull
+    toward references that match FALLEN poses, i.e. it feeds the exact
+    degeneracy the hard box, S and the saturation diagnostic exist to prevent.
+
+    Measured on the stage-3 run of 2026-08-10: mean_steps was ~30 of 60, so
+    roughly HALF of every G in that run was post-mortem. `_gap_per_env` (the ES
+    path) was already masking; this path was not, so the two estimates of the
+    same quantity disagreed by construction.
     """
     tau = rollout_qpos.detach()
     tau_xpos, tau_xquat = kin(tau)
@@ -245,14 +259,21 @@ def gap(
     tau_root_q = kin.body_quat_of(tau_xquat, ["Pelvis"])[..., 0, :]
     tau_ee = kin.body_pos_of(tau_xpos, EE_BODIES) - tau_root.unsqueeze(-2)
 
-    d_pose = (tau[..., 7:] - ref_geo.hinge).pow(2).mean()
-    d_ee = (tau_ee - ref_geo.ee_relative()).pow(2).sum(-1).mean()
-    d_root_pos = (tau_root - ref_geo.root).pow(2).sum(-1).mean()
-
     rel = quat_mul(
         torch.cat([ref_geo.root_quat[..., :1], -ref_geo.root_quat[..., 1:]], dim=-1), tau_root_q
     )
-    d_root_rot = quat_log_map(rel).pow(2).sum(-1).mean()
+
+    if valid is None:
+        avg = lambda x: x.mean()
+    else:
+        w = valid
+        denom = w.sum().clamp(min=1.0)
+        avg = lambda x: (x * w).sum() / denom
+
+    d_pose = avg((tau[..., 7:] - ref_geo.hinge).pow(2).mean(-1))
+    d_ee = avg((tau_ee - ref_geo.ee_relative()).pow(2).sum(-1).mean(-1))
+    d_root_pos = avg((tau_root - ref_geo.root).pow(2).sum(-1))
+    d_root_rot = avg(quat_log_map(rel).pow(2).sum(-1))
 
     return {"g_pose": d_pose, "g_ee": d_ee, "g_root_pos": d_root_pos, "g_root_rot": d_root_rot}
 
@@ -261,7 +282,7 @@ def frac_illegal_frames(kin: TorchKinematics, ref_raw: torch.Tensor) -> torch.Te
     """Fraction of frames with at least one out-of-range hinge.
 
     The headline success metric for the upper level: measured at 0.958 for the
-    naive retarget (phi = 0) across all 540 clips, and Stage 2's gate is getting
+    naive retarget (p = 0) across all 540 clips, and Stage 2's gate is getting
     it below 0.2 (proposal.md 8.2).
     """
     a = kin.normalized_ctrl(ref_raw[..., 7:])

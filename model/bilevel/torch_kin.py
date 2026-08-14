@@ -2,7 +2,7 @@
 
 Why this exists
 ---------------
-The upper level needs d(reference geometry)/d(phi). model/kinematics.py:13
+The upper level needs d(reference geometry)/d(p). model/kinematics.py:13
 batch_forward_pose does the same job with mujoco.mj_kinematics, but it is a
 per-frame Python loop and gives no gradient. MuJoCo has no autodiff (mujoco-mjx
 is not installed, see proposal.md 6.1), so the reference-side FK is

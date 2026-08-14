@@ -5,7 +5,7 @@ bilevel path. Three things change:
 
   1. It reads data/origin_motion/ (the SOURCE-body motion), not the pre-baked
      data/retargeted_motion/. Retargeting is now a runtime, differentiable
-     function of phi -- that is the whole point -- so a baked reference would
+     function of p -- that is the whole point -- so a baked reference would
      be dead weight.
   2. beta actually varies. scripts/build_dataset.py:45 hardcoded
      MORPHOLOGY_LABEL="child" onto all 1530 manifest rows, so LatentAdapter's
@@ -201,7 +201,7 @@ class WindowDataset:
 
     A "sample" is a triple (clip, body, t0). The batch it produces is the source
     window `src_qpos` -- retargeting happens downstream in Retargeter, per
-    iteration, with the current phi.
+    iteration, with the current p.
     """
 
     def __init__(

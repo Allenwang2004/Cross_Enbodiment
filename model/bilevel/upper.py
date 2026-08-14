@@ -1,10 +1,10 @@
-"""Upper level: F(phi), the truncated hypergradient, and the collapse diagnostics.
+"""Upper level: F(p), the truncated hypergradient, and the collapse diagnostics.
 
 The hypergradient decomposes as
 
-    dF/dphi = dF/dref . dref/dphi                   [T1] KEPT, exactly
-            + dF/dtau . dtau/dref . dref/dphi       [T2] estimated by antithetic ES
-            + dF/dtau . dtau/dpsi . dpsi*/dphi      [T3] DROPPED
+    dF/dp = dF/dref . dref/dp                   [T1] KEPT, exactly
+            + dF/dtau . dtau/dref . dref/dp       [T2] estimated by antithetic ES
+            + dF/dtau . dtau/dphi . dphi*/dp      [T3] DROPPED
 
 T1 is plain autograd through RetargetNet and apply_retarget, and is exact and
 zero-variance for S, C and the proximal term (they depend on nothing else) and
@@ -12,16 +12,16 @@ exact-given-tau for G. It carries the bulk of the signal, and it is the entire
 reason the retargeting was reimplemented in torch.
 
     Note carefully: T1 of lambda_ext*E_ext and lambda_phys*P is IDENTICALLY
-    ZERO, because those depend on phi only through the simulator. So the exact
+    ZERO, because those depend on p only through the simulator. So the exact
     path alone cannot see the lower level cheating with the external wrench.
     That hole is exactly what ES fills.
 
 T2 is not negligible. dtau/dref includes the RSI channel, where the initial
-state literally IS ref_phi[t0] -- an upper level that ignores T2 does not know
+state literally IS ref_p[t0] -- an upper level that ignores T2 does not know
 that moving the reference also moves where the robot starts every window. And
 dtau/dref is precisely what MuJoCo cannot give us.
 
-T3 is dropped because dpsi*/dphi = -(H_psipsi J)^-1 H_psiphi J needs a
+T3 is dropped because dphi*/dp = -(H_phiphi J)^-1 H_phip J needs a
 Hessian-inverse-vector product of an RL objective over a contact-discontinuous
 MDP, where even the first-order term is only available as a score-function
 estimate; the second-order variance scales as 1/sigma^4 and is unusable at 6144
@@ -33,8 +33,8 @@ the upper variable -- which holds here BY CONSTRUCTION, since the hard box
 bounds how far the reward's target can move.
 
     HONEST CAVEAT: with T3 dropped we are not solving the bilevel problem. We
-    are running Gauss-Seidel alternation on min_phi F(phi, psi_k) with
-    psi_k <- RL(phi_k), whose stationary points differ. Concretely: phi has no
+    are running Gauss-Seidel alternation on min_p F(p, phi_k) with
+    phi_k <- RL(p_k), whose stationary points differ. Concretely: p has no
     incentive to choose a reference that is hard now but produces a better
     policy later. For this application that is a feature -- we want a faithful,
     feasible reference, not a curriculum -- and faithful+feasible is exactly
@@ -160,7 +160,7 @@ class UpperLevel:
         # are used, which span six orders of magnitude and would make the
         # configured weights mean nothing (see semantics.weighted_sum).
         self.scales: Optional[Dict[str, float]] = None
-        self.baseline: Dict[str, float] = {}   # each term at phi = 0, for the Stage 2 gate
+        self.baseline: Dict[str, float] = {}   # each term at p = 0, for the Stage 2 gate
 
         # Source-body geometry constants, needed by S.
         self.src = ds.source
@@ -208,7 +208,7 @@ class UpperLevel:
                           verbose: bool = True) -> float:
         """Install the ground offset dz_root analytically instead of learning it.
 
-        The phi=0 reference sits INSIDE the floor on ~88% of frames (measured:
+        The p=0 reference sits INSIDE the floor on ~88% of frames (measured:
         child median -0.0120 m, teen -0.0155 m, worst -0.204 m), because
         replacing scripts/qpos_retarget.py:127 ground_correct_qpos's per-frame
         lift with a learned dz_root left nothing to do the lifting at
@@ -258,20 +258,20 @@ class UpperLevel:
                   verbose: bool = True) -> Dict[str, float]:
         """Set each S/C term's unit to the magnitude it reaches at the BOX CORNER.
 
-        Not to its phi=0 value. Several terms are structurally zero at phi=0 --
+        Not to its p=0 value. Several terms are structurally zero at p=0 --
         measured: s_heading = 2e-32 (the root quaternion is copied verbatim, so
         the turning rate is identical by construction) and c_float = 0 exactly.
         Dividing by those gives weights of order 1e11 and the objective is
         destroyed by whichever degenerate term moves first.
 
-        The reachable range is the meaningful scale instead. phi's outputs are
+        The reachable range is the meaningful scale instead. p's outputs are
         bounded by the hard tanh box (retarget.py), so evaluating the terms at
-        random box corners gives, for each term, the largest value phi can
-        produce. Every normalized term then lands in roughly [0, 1] over phi's
+        random box corners gives, for each term, the largest value p can
+        produce. Every normalized term then lands in roughly [0, 1] over p's
         ENTIRE reachable set, which is exactly the condition under which the
         weights in BilevelConfig are comparable priorities.
 
-        Also records the phi=0 values as `self.baseline` -- proposal.md 8.2
+        Also records the p=0 values as `self.baseline` -- proposal.md 8.2
         Stage 0 item 6 wants those on record as the Stage 2 target line.
 
         Costs one torch FK per body per corner and no simulation at all.
@@ -291,7 +291,7 @@ class UpperLevel:
 
             u0 = torch.zeros(n, U_DIM, dtype=torch.float64, device=self.device)
             rr, r, _ = self.retargeters[b](src, beta, u_override=u0, n_out=H1)
-            for k, v in self._phi_terms(b, spec, rr, r, src, H1).items():
+            for k, v in self._p_terms(b, spec, rr, r, src, H1).items():
                 at_zero.setdefault(k, []).append(float(v))
 
             for _ in range(n_corners):
@@ -300,11 +300,11 @@ class UpperLevel:
                                      dtype=torch.float64) * 2 - 1
                 u = (6.0 * sign).expand(n, -1)
                 rr, r, _ = self.retargeters[b](src, beta, u_override=u, n_out=H1)
-                for k, v in self._phi_terms(b, spec, rr, r, src, H1).items():
+                for k, v in self._p_terms(b, spec, rr, r, src, H1).items():
                     at_corner.setdefault(k, []).append(float(v))
 
         self.baseline = {k: float(np.mean(v)) for k, v in at_zero.items()}
-        # Floor at the phi=0 value: a term can only be normalized down to the
+        # Floor at the p=0 value: a term can only be normalized down to the
         # range it actually spans, never below where it already sits.
         self.scales = {
             k: max(float(np.mean(v)), self.baseline.get(k, 0.0), 1e-9)
@@ -314,11 +314,11 @@ class UpperLevel:
             print("upper-level term calibration  (unit = value at the hard-box corner):")
             for k in sorted(self.scales):
                 b0 = self.baseline.get(k, 0.0)
-                print(f"    {k:<14} phi=0 {b0:>11.4g}   corner {self.scales[k]:>11.4g}"
-                      f"   -> normalized at phi=0: {b0 / self.scales[k]:.3f}")
+                print(f"    {k:<14} p=0 {b0:>11.4g}   corner {self.scales[k]:>11.4g}"
+                      f"   -> normalized at p=0: {b0 / self.scales[k]:.3f}")
         return self.scales
 
-    def _phi_terms(self, b: int, spec, ref_raw, ref, src, H1) -> Dict[str, torch.Tensor]:
+    def _p_terms(self, b: int, spec, ref_raw, ref, src, H1) -> Dict[str, torch.Tensor]:
         """The S and C raw terms for one body group."""
         dev = self.device
         foot_rest = torch.as_tensor(spec.foot_rest_heights, dtype=torch.float64, device=dev)
@@ -331,11 +331,11 @@ class UpperLevel:
                                          leg_len=spec.leg_len))
         return out
 
-    # ------------------------------------------------------------------ F(phi)
+    # ------------------------------------------------------------------ F(p)
 
     def evaluate(self, ep: Dict[str, torch.Tensor], u_bb: torch.Tensor,
                  with_grad: bool = True) -> Tuple[torch.Tensor, Dict[str, float], torch.Tensor]:
-        """F(phi) on the control slots, with the exact T1 graph attached.
+        """F(p) on the control slots, with the exact T1 graph attached.
 
         Returns (F, metrics, per_env_F_sim). The reference is RECOMPUTED here
         with a live graph -- rollout.py only ever built a detached one, because
@@ -375,18 +375,35 @@ class UpperLevel:
                 )
                 c_terms = reference_feasibility(cfg, kin, ref_raw, ref_geo, src_geo,
                                                 leg_len=spec.leg_len)
-                # Normalized by each term's own phi=0 value (calibrate()), so the
+                # Normalized by each term's own p=0 value (calibrate()), so the
                 # weights in BilevelConfig are relative priorities and S == 1.0
-                # at phi = 0 by construction.
+                # at p = 0 by construction.
                 S = weighted_sum(cfg, s_terms, self.scales)
                 C = weighted_sum(cfg, c_terms, self.scales)
 
                 # tau is detached inside gap(): MuJoCo gave us no gradient, so
-                # the only thing this contributes to dF/dphi is the pull on ref.
+                # the only thing this contributes to dF/dp is the pull on ref.
                 tau = ep["qpos"][:, sl].transpose(0, 1).to(torch.float64)
                 valid = ep["valid"][:, sl].transpose(0, 1).to(torch.float64)
-                g_terms = gap(cfg, kin, tau, _shift_ref(ref_geo, ref))
+                g_terms = gap(cfg, kin, tau, _shift_ref(ref_geo, ref), valid)
                 G = weighted_sum(cfg, g_terms, None)  # G's channels are already commensurate
+
+                # THE anti-cheat check (proposal.md 3.5). G is measured against
+                # the reference p produced; G_ref0 against the p=0 reference,
+                # which p cannot touch. Both must fall together. If only G
+                # falls, the gap was closed by MOVING THE REFERENCE onto the
+                # robot rather than by the robot improving -- which is the one
+                # failure mode this whole design exists to prevent, and the only
+                # way to see it. Costs one extra torch FK on a detached graph.
+                with torch.no_grad():
+                    _, ref0, _ = rt(src_all[sl], beta_all[sl],
+                                    u_override=torch.zeros_like(u_bb[b]).expand(n_b, -1),
+                                    n_out=H1)
+                    geo0 = UpperGeometry(kin, ref0, foot_rest)
+                    g0 = gap(cfg, kin, tau, _shift_ref(geo0, ref0), valid)
+                    acc["G_ref0"] = acc.get("G_ref0", 0.0) + float(
+                        weighted_sum(cfg, g0, None)
+                    )
 
                 E_ext, P = self._sim_terms(ep, sl)
 
@@ -408,7 +425,7 @@ class UpperLevel:
                         frac_illegal_frames(kin, ref_raw)
                     )
                     # The reference's own ground clearance, and the dz_root that
-                    # sets it. Stage 1 exists to drive these: at phi=0 the
+                    # sets it. Stage 1 exists to drive these: at p=0 the
                     # reference sits ~12-16 mm INSIDE the floor on 88% of
                     # frames, which is what makes RSI start every window in the
                     # ground. ref_min_z should come up to roughly +0.002 m.
@@ -502,7 +519,7 @@ class UpperLevel:
         u_before = u_bb.detach().clone().to(torch.float64)
         self.optimizer.step()
 
-        # Trust region on u, not on phi. u = f(phi) is nonlinear, so the step is
+        # Trust region on u, not on p. u = f(p) is nonlinear, so the step is
         # projected back by backtracking rather than solved for: interpolate the
         # parameters toward their pre-step values until ||delta u||_inf fits.
         # This bounds how much the lower level's reward target can move in one

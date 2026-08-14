@@ -20,7 +20,7 @@ recovers none. The rest pose is simply not where the torque demand lives.
 
 What this does instead
 ----------------------
-Measure the demand. For a sample of real reference poses (the phi=0 retarget of
+Measure the demand. For a sample of real reference poses (the p=0 retarget of
 actual clips -- exactly what the policy will be asked to track), compute the
 static torque each actuator must supply, and size the actuator so that this body
 has the SAME headroom the adult has on the same motion:
@@ -89,7 +89,7 @@ def static_torques(model, poses):
 
 
 def retarget_naive(frames, model, src_rest_h):
-    """phi = 0: root scaled by the rest-height ratio, hinges copied then clamped.
+    """p = 0: root scaled by the rest-height ratio, hinges copied then clamped.
     Identical to model/bilevel/retarget.py at u = 0."""
     q = frames.copy()
     q[:, 0:3] *= float(model.qpos0[2]) / src_rest_h
@@ -191,17 +191,43 @@ def main():
                     help="floor on rest-pose headroom (forcerange / static torque at qpos0)")
     ap.add_argument("--max-k", type=float, default=50.0)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--task-prefixes", nargs="*", default=None,
+                    help="restrict the reference-pose sample to these task-name "
+                         "prefixes (e.g. `move jump`). WHAT THIS FIXES: the p90 "
+                         "band the actuator is sized against is dominated by "
+                         "GROUND-LEVEL poses -- measured over all 54 tasks, the "
+                         "top-10%-torque poses have a median pelvis height of "
+                         "0.216 m against 0.885 m for the rest, and 7.4 clamped "
+                         "joints against 4.1. Those are crawl/lieonground/"
+                         "sitonground/split frames whose torque is an artifact of "
+                         "the p=0 retarget pinning joints on their limits, not a "
+                         "demand the motion actually makes. Sizing a walking "
+                         "robot against them is what drives k into the --max-k "
+                         "ceiling (short_stocky 36/69 actuators, short_limbed "
+                         "25/69). Default None = all tasks, the shipped behaviour.")
     args = ap.parse_args()
 
     # ---- reference poses, from real clips -------------------------------
     rng = np.random.default_rng(args.seed)
     clips = sorted((REPO_ROOT / "data" / "origin_motion").rglob("*.npz"))
+    if args.task_prefixes:
+        clips = [c for c in clips
+                 if any(c.parent.name.startswith(p) for p in args.task_prefixes)]
     if not clips:
-        raise SystemExit("no clips under data/origin_motion")
-    picks = rng.choice(len(clips), size=min(args.frames, len(clips)), replace=False)
+        raise SystemExit(f"no clips under data/origin_motion "
+                         f"matching {args.task_prefixes}")
+    # One frame per distinct clip while the pool allows it -- which keeps the
+    # unfiltered default bit-identical to the shipped calibration. A filtered
+    # pool can be smaller than --frames, so fall back to sampling clips with
+    # replacement rather than silently shrinking the sample.
+    replace = len(clips) < args.frames
+    picks = rng.choice(len(clips), size=args.frames, replace=replace)
     frames = np.stack([
         (lambda q: q[rng.integers(0, len(q))])(np.load(clips[i])["qpos"]) for i in picks
     ])
+    print(f"reference poses: {args.frames} from {len(clips)} clips"
+          + (f" matching {args.task_prefixes}" if args.task_prefixes else " (all tasks)")
+          + (" [clips sampled with replacement]" if replace else ""))
 
     src_dir = args.src / args.source_body
     src_model = mujoco.MjModel.from_xml_path(str(src_dir / "robot.xml"))
@@ -211,10 +237,24 @@ def main():
              for i in range(src_model.nu)]
     F_adult = np.abs(src_model.actuator_forcerange[:, 1]).copy()
 
-    tau_adult = np.percentile(
-        static_torques(src_model, retarget_naive(frames, src_model, src_rest_h)),
-        args.percentile, axis=0,
-    )
+    # What the sample actually looks like, since the whole calibration is an
+    # order statistic over it. The two rows that matter are pelvis height and
+    # clamped-joint count in the tail band: if the top decile is much lower and
+    # much more clamped than the rest, the actuator is being sized against
+    # retarget artifacts rather than against the motion.
+    src_poses = retarget_naive(frames, src_model, src_rest_h)
+    T_src = static_torques(src_model, src_poses)
+    n_clamped = ((frames[:, 7:] < src_model.jnt_range[1:, 0])
+                 | (frames[:, 7:] > src_model.jnt_range[1:, 1])).sum(1)
+    per_pose = T_src.max(1)
+    hi = per_pose >= np.percentile(per_pose, args.percentile)
+    print(f"  pose sample     {'below p' + str(int(args.percentile)):>18}{'top band':>12}")
+    print(f"    max torque (Nm){np.median(per_pose[~hi]):>18.1f}{np.median(per_pose[hi]):>12.1f}")
+    print(f"    pelvis z (m)   {np.median(src_poses[~hi, 2]):>18.3f}"
+          f"{np.median(src_poses[hi, 2]):>12.3f}")
+    print(f"    clamped joints {n_clamped[~hi].mean():>18.1f}{n_clamped[hi].mean():>12.1f}")
+
+    tau_adult = np.percentile(T_src, args.percentile, axis=0)
     # Floor the adult's demand before dividing by it. Several joints are almost
     # unloaded on the adult (Torso_x, the near-locked knee_y/z), so a per-joint
     # headroom of F_adult/tau_adult is astronomically large there, and sizing

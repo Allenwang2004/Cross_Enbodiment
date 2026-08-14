@@ -3,7 +3,7 @@ scripts/build_dataset.py).
 
 NOTE -- retargeted_motion has been REMOVED from this dataset.
 The bilevel system (model/bilevel/) produces the reference motion at runtime as
-a differentiable function of phi, so a pre-baked copy is not just redundant, it
+a differentiable function of p, so a pre-baked copy is not just redundant, it
 is the thing the design exists to replace. The 540 baked .npz files (78 MB here
 plus 78 MB in data/) were deleted along with the manifest field.
 

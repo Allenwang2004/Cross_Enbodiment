@@ -16,7 +16,7 @@ training bodies conditional on this audit rather than on the label list.
 What is measured
 ----------------
 For N reference frames drawn from real clips (naively retargeted onto the body,
-i.e. exactly what phi=0 produces):
+i.e. exactly what p=0 produces):
     qvel = qacc = 0, then mj_inverse  ->  the static torque needed to HOLD the pose
     headroom_j = forcerange_j / |qfrc_inverse_j|      (>= 1 means feasible)
 This is the quasi-static lower bound: a frame that fails it cannot be held even
@@ -73,7 +73,7 @@ def audit(body_dir: Path, frames: np.ndarray, src_rest_h: float, verbose=True):
     rest_h = float(model.qpos0[2])
     mass = float(model.body_mass.sum())
 
-    # Naive (phi = 0) retarget: root scaled by the rest-height ratio, hinges
+    # Naive (p = 0) retarget: root scaled by the rest-height ratio, hinges
     # copied, then clamped into this body's own jnt_range -- exactly what
     # model/bilevel/retarget.py produces at u = 0.
     q = frames.copy()
@@ -136,7 +136,7 @@ def main():
     ])
 
     bodies = sorted(p for p in robots.iterdir() if (p / "robot.xml").exists())
-    print(f"static feasibility of the phi=0 reference, {len(frames)} frames x {len(bodies)} bodies")
+    print(f"static feasibility of the p=0 reference, {len(frames)} frames x {len(bodies)} bodies")
     print(f"(headroom = forcerange / |static torque|; >= 1 means the pose can be HELD)\n")
     print(f"{'body':<14}{'mass':>7}{'rest_h':>8}{'scaled':>7}{'infeas':>8}"
           f"{'med.head':>10}{'rest.head':>10}  worst joint")

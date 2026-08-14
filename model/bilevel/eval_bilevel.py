@@ -34,9 +34,9 @@ for a per-step reward but exactly right here, and keeping them untouched is
 what makes the comparison against the old baseline meaningful.
 
 D is reported against BOTH references:
-    D_phi   vs the phi-adjusted reference the upper level produced
-    D_0     vs the naive phi=0 retarget
-This is the decisive anti-degeneracy test from proposal.md 3.5. If D_phi falls
+    D_p   vs the p-adjusted reference the upper level produced
+    D_0     vs the naive p=0 retarget
+This is the decisive anti-degeneracy test from proposal.md 3.5. If D_p falls
 while D_0 does not, the upper level closed the gap by moving the reference
 rather than by the robot improving.
 
@@ -146,16 +146,16 @@ def eval_body(cfg, body: str, tasks, policy, value_net, net, source_rest_h,
         finally:
             pool.close()
 
-        # phi = 0 reference, for the decisive D_0 comparison
+        # p = 0 reference, for the decisive D_0 comparison
         u0 = torch.zeros(n, U_DIM, dtype=torch.float64, device=cfg.device)
         src = torch.as_tensor(batch["src_qpos"], dtype=torch.float64, device=cfg.device)
         beta = torch.as_tensor(batch["beta"], dtype=torch.float64, device=cfg.device)
         raw0, ref0, _ = retargeters[0](src, beta, u_override=u0, n_out=cfg.horizon + 1)
-        raw_phi, _, _ = retargeters[0](src, beta, u_override=u_env, n_out=cfg.horizon + 1)
+        raw_p, _, _ = retargeters[0](src, beta, u_override=u_env, n_out=cfg.horizon + 1)
 
         tau = ep["qpos"].transpose(0, 1).cpu().numpy()        # (n, H, 76)
         valid = ep["valid"].transpose(0, 1).cpu().numpy()
-        ref_phi = ep["ref"].cpu().numpy()[:, 1:]
+        ref_p = ep["ref"].cpu().numpy()[:, 1:]
         ref_0 = ref0.cpu().numpy()[:, 1:]
         terms = ep["terms"].transpose(0, 1).cpu().numpy()
         i = R.TERM_IDX
@@ -166,7 +166,7 @@ def eval_body(cfg, body: str, tasks, policy, value_net, net, source_rest_h,
                 traj = tau[k, :2]
             else:
                 traj = tau[k, :alive]
-            d_phi, _ = losses.functional_equivalence(fk_model, traj, ref_phi[k, :len(traj)], D_WEIGHTS)
+            d_p, _ = losses.functional_equivalence(fk_model, traj, ref_p[k, :len(traj)], D_WEIGHTS)
             d_0, _ = losses.functional_equivalence(fk_model, traj, ref_0[k, :len(traj)], D_WEIGHTS)
             l_phys, _ = losses.physics_penalty(fk_model, traj)
             w = valid[k][:, None]
@@ -176,7 +176,7 @@ def eval_body(cfg, body: str, tasks, policy, value_net, net, source_rest_h,
                 "task": ds.clips[idx[k]].task,
                 "trial": ds.clips[idx[k]].trial,
                 "survived": alive / cfg.horizon,
-                "D_phi": float(d_phi),
+                "D_p": float(d_p),
                 "D_0": float(d_0),
                 "L_phys": float(l_phys),
                 "r_track": float(sum(
@@ -186,15 +186,15 @@ def eval_body(cfg, body: str, tasks, policy, value_net, net, source_rest_h,
                 "pose_err": float((terms[k][:, i["pose_err"]] * valid[k]).sum() / denom),
             })
 
-    frac_ill_phi = float(frac_illegal_frames(spec.kin, raw_phi))
+    frac_ill_p = float(frac_illegal_frames(spec.kin, raw_p))
     frac_ill_0 = float(frac_illegal_frames(spec.kin, raw0))
     for r in rows:
-        r["frac_illegal_phi"] = frac_ill_phi
+        r["frac_illegal_p"] = frac_ill_p
         r["frac_illegal_0"] = frac_ill_0
     if verbose:
         print(f"    {body:<14} {len(rows):3d} clips   "
               f"survived {np.mean([r['survived'] for r in rows]):.2f}   "
-              f"D_phi {np.mean([r['D_phi'] for r in rows]):7.2f}   "
+              f"D_p {np.mean([r['D_p'] for r in rows]):7.2f}   "
               f"D_0 {np.mean([r['D_0'] for r in rows]):7.2f}   "
               f"L_phys {np.mean([r['L_phys'] for r in rows]):6.2f}")
     return rows
@@ -266,7 +266,7 @@ def main():
         print()
 
     # ---- summary ---------------------------------------------------------
-    print(f"{'quadrant':<26}{'n':>5}{'survive':>9}{'D_phi':>9}{'D_0':>9}"
+    print(f"{'quadrant':<26}{'n':>5}{'survive':>9}{'D_p':>9}{'D_0':>9}"
           f"{'L_phys':>9}{'r_track':>9}{'illegal':>9}")
     print("-" * 85)
     summary = {}
@@ -278,28 +278,28 @@ def main():
         if not rs:
             continue
         agg = {k: float(np.mean([r[k] for r in rs]))
-               for k in ("survived", "D_phi", "D_0", "L_phys", "r_track",
-                         "frac_illegal_phi", "frac_illegal_0")}
+               for k in ("survived", "D_p", "D_0", "L_phys", "r_track",
+                         "frac_illegal_p", "frac_illegal_0")}
         agg["n"] = len(rs)
         summary[name] = agg
-        print(f"{name:<26}{len(rs):>5}{agg['survived']:>9.2f}{agg['D_phi']:>9.2f}"
+        print(f"{name:<26}{len(rs):>5}{agg['survived']:>9.2f}{agg['D_p']:>9.2f}"
               f"{agg['D_0']:>9.2f}{agg['L_phys']:>9.2f}{agg['r_track']:>9.3f}"
-              f"{agg['frac_illegal_phi']:>9.3f}")
+              f"{agg['frac_illegal_p']:>9.3f}")
 
     hl = summary.get("unseen_body_unseen_task")
     if hl:
-        print(f"\nheadline (unseen body x unseen task): D_phi {hl['D_phi']:.2f}  "
+        print(f"\nheadline (unseen body x unseen task): D_p {hl['D_p']:.2f}  "
               f"L_phys {hl['L_phys']:.2f}  survived {hl['survived']:.2f}")
 
     # The decisive anti-degeneracy check (proposal.md 3.5).
     seen = summary.get("seen_body_seen_task")
     if seen:
         print(f"\nupper-level honesty check on the training quadrant:")
-        print(f"  frac_illegal  phi=0 {seen['frac_illegal_0']:.3f} -> phi {seen['frac_illegal_phi']:.3f}"
+        print(f"  frac_illegal  p=0 {seen['frac_illegal_0']:.3f} -> p {seen['frac_illegal_p']:.3f}"
               f"   (target < 0.2)")
-        print(f"  D against     phi=0 ref {seen['D_0']:.2f}   phi ref {seen['D_phi']:.2f}")
-        if seen["D_phi"] < seen["D_0"] * 0.5:
-            print("  WARNING: D_phi is far below D_0 -- the gap may be closing because the")
+        print(f"  D against     p=0 ref {seen['D_0']:.2f}   p ref {seen['D_p']:.2f}")
+        if seen["D_p"] < seen["D_0"] * 0.5:
+            print("  WARNING: D_p is far below D_0 -- the gap may be closing because the")
             print("           reference moved toward the robot, not because the robot improved.")
 
     args.out.mkdir(parents=True, exist_ok=True)

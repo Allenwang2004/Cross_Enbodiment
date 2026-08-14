@@ -64,7 +64,7 @@ def block_specs(n_envs: int, n_workers: int, horizon: int, nq: int, nv: int,
         BlockSpec("ctrl", (n_envs, nu), np.float32, "in"),
         BlockSpec("xfrc", (n_envs, 6), np.float32, "in"),          # WORLD frame; main rotates
         BlockSpec("raw_prior", (n_envs, nu), np.float32, "in"),    # frozen actor's mean, for e_res
-        BlockSpec("ref_qpos", (n_envs, H1, nq), np.float64, "in"),  # phi-adjusted, clamped
+        BlockSpec("ref_qpos", (n_envs, H1, nq), np.float64, "in"),  # p-adjusted, clamped
         BlockSpec("ref_qvel0", (n_envs, nv), np.float64, "in"),     # via mj_differentiatePos
         BlockSpec("rsi_noise", (n_envs, nu), np.float32, "in"),     # sampled in MAIN, so it is
                                                                     # seedable and CRN-shareable

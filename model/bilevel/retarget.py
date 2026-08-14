@@ -23,7 +23,7 @@ because it is the only defence that cannot be broken by mis-setting a weight.
 The other two (the fidelity term S, and the saturation diagnostic) live in
 semantics.py and upper.py.
 
-phi = 0 reproduces scripts/qpos_retarget.py:91 retarget_qpos EXACTLY. The naive
+p = 0 reproduces scripts/qpos_retarget.py:91 retarget_qpos EXACTLY. The naive
 retarget is the architectural origin, not a soft target -- asserted in
 tests/test_retarget.py.
 
@@ -97,7 +97,7 @@ class RetargetParams(nn.Module):
             "log_scale0", torch.log(torch.tensor(target_rest_h / source_rest_h, dtype=torch.float64))
         )
         # Per-dimension freeze. A zeroed dimension has u = 0 going into tanh, so
-        # that parameter takes its phi=0 value exactly and receives no gradient
+        # that parameter takes its p=0 value exactly and receives no gradient
         # -- which is what makes "unfreeze one axis at a time" possible without
         # a second code path.
         mask = torch.ones(U_DIM, dtype=torch.float64)
@@ -132,7 +132,7 @@ class RetargetParams(nn.Module):
         pushing toward collapse and lambda_fid is too small.
 
         Frozen dimensions are excluded from the denominator -- they sit at 0 by
-        construction, so counting them would dilute the alarm exactly when phi
+        construction, so counting them would dilute the alarm exactly when p
         is most restricted (Stage 1 frees 1 of 36, which would cap the reported
         saturation at 0.028 no matter how hard that one dimension saturates).
         """
@@ -144,7 +144,7 @@ class RetargetNet(nn.Module):
     """beta (B, 8) -> u (B, 36).
 
     Deliberately tiny and beta-only. No clip identity, no timestep, no state: a
-    per-clip or per-frame phi would collapse immediately, and 36 global numbers
+    per-clip or per-frame p would collapse immediately, and 36 global numbers
     shared across 540 clips x 10 bodies is what makes the capacity argument in
     proposal.md 3.1 hold.
 
@@ -174,7 +174,7 @@ class RetargetNet(nn.Module):
         """Set one output dimension's bias so u[dim] starts at a chosen value.
 
         Used for dz_root. Removing scripts/qpos_retarget.py:127
-        ground_correct_qpos's per-frame lift left the phi=0 reference sitting
+        ground_correct_qpos's per-frame lift left the p=0 reference sitting
         ~12-16 mm inside the floor on 88% of frames, and learning that offset
         from scratch is absurd: it is analytically computable (it is just the
         reference's own median ground penetration), while lr_upper=1e-5 -- sized
@@ -183,7 +183,7 @@ class RetargetNet(nn.Module):
         after 50 iterations.
 
         So the offset is computed and installed, and gradient descent only
-        refines it. This does not weaken the phi=0 anchor: that property is
+        refines it. This does not weaken the p=0 anchor: that property is
         about apply_retarget's algebra (tests/test_retarget.py passes u=0
         explicitly), not about where training happens to initialize.
 
@@ -200,7 +200,7 @@ def _resample_time(src: torch.Tensor, tau: torch.Tensor, n_out: int) -> torch.Te
     """Differentiable linear resample along time. src: (B, T, D), tau: (B,).
 
     Output frame k is sampled at source time k * tau. tau == 1 hits integer
-    indices exactly, so the phi=0 path is bit-identical to plain slicing (the
+    indices exactly, so the p=0 path is bit-identical to plain slicing (the
     lerp weight is exactly 0). Only used when cfg.enable_time_warp is on;
     callers must supply enough source margin (see WindowDataset.src_window_len).
     """
@@ -271,7 +271,7 @@ class Retargeter(nn.Module):
 
     One instance per training body (they differ only in `log_scale0` and the
     TorchKinematics they clamp against); the RetargetNet itself is SHARED across
-    bodies -- that sharing is what forces phi to be a genuine function of beta
+    bodies -- that sharing is what forces p to be a genuine function of beta
     rather than 10 independent per-body corrections.
     """
 

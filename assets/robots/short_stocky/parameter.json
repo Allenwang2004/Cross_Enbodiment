@@ -8,5 +8,6 @@
   "leg_girth": 1.25,
   "arm_girth": 1.25,
   "torso_girth": 1.3,
-  "head_girth": 1.05
+  "head_girth": 1.05,
+  "split": "test"
 }

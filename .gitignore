@@ -94,8 +94,15 @@ Config/DefaultEditor*
 __pycache__/
 *.pyc
 /data/
-/datasets/metamotivo-M-1-datasets/
+/datasets/
 
 bedlam2_retargeting_humanoid/
 
 mujoco_Humanoid_motionretargeting/
+
+/wandb
+
+/amass_origin_motion
+/amass_retargeting_motion
+/amass_retargeting_z
+/amass_z_inference

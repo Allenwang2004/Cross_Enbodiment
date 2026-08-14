@@ -8,5 +8,6 @@
   "leg_girth": 1.1,
   "arm_girth": 1.2,
   "torso_girth": 1.15,
-  "head_girth": 1.0
+  "head_girth": 1.0,
+  "split": "train"
 }

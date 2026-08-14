@@ -22,7 +22,7 @@ class BilevelConfig:
     # train_bodies below. The originals are left untouched so the legacy
     # model/train.py baseline and outputs/{baseline,eval}/report.json stay
     # reproducible.
-    robots_dir: str = "assets/robots_calib"
+    robots_dir: str = "assets/robots_calib_move"
     source_body: str = "adult"                         # the body the frozen policy was trained on
     # 10 training bodies + 2 held out for testing.
     #
@@ -57,10 +57,13 @@ class BilevelConfig:
     heldout_bodies: List[str] = dataclasses.field(default_factory=lambda: [
         "giant", "short_stocky",
     ])
-    # `heavy` (210 kg, 2.9x the adult) is the one body left out entirely. Even
-    # after calibration its rest-pose headroom is 0.975: reaching a usable
-    # margin needs roughly a 250x actuator, at which point it is no longer a
-    # plausible humanoid, just a very strong machine. Excluded deliberately.
+    # `heavy` (210 kg, 2.9x the adult) used to sit here as an "unused" body and
+    # has now been DELETED from assets/ entirely. Even after calibration its
+    # rest-pose headroom was 0.975, and reaching a usable margin needed roughly
+    # a 250x actuator (measured 300x, clamp-limited, on the move/jump-only
+    # calibration) -- at which point it is no longer a plausible humanoid, just
+    # a very strong machine. The audit numbers quoting it in docs/ and in
+    # scripts/calibrate_actuators.py are kept as the record of that finding.
     # Task-level split, so correlated trials of one task cannot straddle it
     # (same rationale as scripts/split_tasks.py:4-7).
     splits_dir: str = "datasets/crossenbodiment-1-datasets/splits"
@@ -73,7 +76,7 @@ class BilevelConfig:
     physics_dt: float = 1.0 / 450.0
     action_repeat: int = 15
     n_envs: int = 256                   # proposal.md 9: deliberately 256, not new.md's 1024
-    horizon: int = 24                   # steps per window
+    horizon: int = 60                   # steps per window
     n_workers: int = 32                 # = physical cores; sims_per_worker = n_envs // n_workers
     pin_workers: bool = True            # os.sched_setaffinity, measured worth ~14% (6.1)
     spin_iters: int = 2000              # spin-then-yield; mp.Barrier measured 1030ms vs 632ms (6.1)
@@ -84,7 +87,7 @@ class BilevelConfig:
     rsi_penetration_tol: float = -0.01  # retry with halved noise if contact.dist goes below
     rsi_max_retries: int = 3
 
-    # ------------------------------------------------------------ upper level (phi)
+    # ------------------------------------------------------------ upper level (p)
     retarget_hidden_dims: List[int] = dataclasses.field(default_factory=lambda: [64, 64])
     # Hard tanh box half-widths (proposal.md 3.2). These are the primary
     # anti-degeneracy defence: they make collapse structurally impossible rather
@@ -96,15 +99,15 @@ class BilevelConfig:
     box_joint_bias: float = 0.15        # rad, per joint group
     box_log_tau: float = 0.223144       # log(1.25); time-warp, frozen until Stage 3
     enable_time_warp: bool = False
-    # Which of u's 36 dimensions phi is allowed to move. None = all of them.
-    # Stage 1 frees ONLY dz_root (see train_bilevel.apply_stage): the phi=0
+    # Which of u's 36 dimensions p is allowed to move. None = all of them.
+    # Stage 1 frees ONLY dz_root (see train_bilevel.apply_stage): the p=0
     # reference sits ~12-16 mm inside the floor on 88% of frames, because
     # replacing scripts/qpos_retarget.py's per-frame ground_correct_qpos with a
-    # LEARNED dz_root means freezing phi also freezes the only mechanism that
+    # LEARNED dz_root means freezing p also freezes the only mechanism that
     # can lift it out. Names are in retarget.py (U_ROOT_DZ etc.).
     upper_free_dims: Optional[List[int]] = None
 
-    # F(phi) weights (proposal.md 3.4). lambda_fid/lambda_gap = 3 fixes the
+    # F(p) weights (proposal.md 3.4). lambda_fid/lambda_gap = 3 fixes the
     # maximum drift of the reference toward the robot at lambda_gap/(sum) = 25%.
     lambda_gap: float = 1.0
     lambda_fid: float = 3.0
@@ -137,7 +140,7 @@ class BilevelConfig:
     # TTSA (proposal.md 4.2)
     lr_upper: float = 1e-5              # vs lr_lower 3e-4 -> 30:1
     upper_every: int = 10               # K; effective timescale ratio 300:1
-    upper_warmup_iters: int = 500       # phi frozen at 0 until psi is worth measuring
+    upper_warmup_iters: int = 500       # p frozen at 0 until phi is worth measuring
     upper_clip_linf: float = 0.02       # hard per-step cap on ||delta u||_inf
     # Antithetic ES for the T2 / simulator-only terms (proposal.md 4.4).
     es_enabled: bool = False            # Stage 3
@@ -145,7 +148,7 @@ class BilevelConfig:
     es_pairs_per_body: int = 2
     es_windows_per_group: int = 6
 
-    # ------------------------------------------------------------ lower level (psi)
+    # ------------------------------------------------------------ lower level (phi)
     adapter_hidden_dims: List[int] = dataclasses.field(default_factory=lambda: [256, 512, 512, 256])
     adapter_alpha: float = 0.05         # was 0.1 in model/config.py:15; halved because z_beta is
                                         # now projected back onto the sphere, so the delta acts
@@ -168,7 +171,15 @@ class BilevelConfig:
     wrench_enabled: bool = True
     wrench_f_frac: float = 0.5          # f_max = this * M * g
     wrench_m_frac: float = 0.5          # m_max = this * f_max * L_leg
-    wrench_hold_iters: int = 2000       # constant until here
+    # 5000, not 2000. The BC term finishes annealing at bc_anneal_end and the
+    # wrench STARTS annealing at wrench_hold_iters; setting both to 2000 removed
+    # the analytic crutch and began removing the physical one on the SAME
+    # iteration. Measured on the 2026-08-10 stage-3 run: r_track fell 0.71 ->
+    # 0.50 across iterations 1980-2100 and never recovered over the remaining
+    # 8000 iterations. Staggering them keeps this stage's own principle -- one
+    # new source of difficulty at a time -- inside the stage as well as between
+    # stages.
+    wrench_hold_iters: int = 5000       # constant until here
     wrench_anneal_end: int = 8000       # cosine to zero by here
 
     # PPO (proposal.md 5.5)
@@ -206,6 +217,32 @@ class BilevelConfig:
     long_eval_horizon: int = 299        # 10.0 s @ 30 Hz, same as eval_bilevel.py
     long_eval_wrench: float = 0.0       # always report without the crutch (R5)
 
+    # ------------------------------------------------------- AMP (model/bilevel/amp.py)
+    # A STATIONARY replacement for the time-indexed r_track. See amp.py's module
+    # docstring for why the time index is the root cause of the compounding
+    # error; in short, under a reward that depends on t the optimal policy is
+    # pi*(s, t) while this architecture can only represent pi(s), and RSI was
+    # silently supplying the missing clock every 24 steps.
+    amp_enabled: bool = False
+    amp_hidden_dims: List[int] = dataclasses.field(default_factory=lambda: [512, 256])
+    amp_lr: float = 1e-4
+    amp_minibatches: int = 4
+    amp_grad_penalty: float = 5.0       # on REAL samples (AMP eq. 9). Drop it and D
+                                        # wins in a few hundred iterations, the reward
+                                        # pins at 0 and the policy gets nothing.
+    amp_norm_momentum: float = 0.99
+    # How much of the 0.65 tracking budget r_amp takes over, cosine-ramped from
+    # amp_warmup_iters to amp_full_iters. Ramped rather than switched because
+    # the time-indexed reward is a far better early teacher -- it just cannot be
+    # what we deploy on. Same role as lambda_bc and the wrench: scaffolding.
+    amp_weight_final: float = 1.0
+    amp_warmup_iters: int = 200
+    amp_full_iters: int = 1000
+    # With r_amp in charge, the tracking-failure termination is itself a clock:
+    # it kills a window for being out of phase. Relaxed rather than removed, so
+    # a genuinely diverged rollout still ends.
+    amp_term_pose_err: float = 3.0
+
     adv_norm_momentum: float = 0.99     # per-(clip, body) advantage EMA
     adv_std_floor: float = 0.1          # per-pair std floored at this x the batch std, so the
                                         # per-pair division can rescale by at most ~10x. Without
@@ -227,7 +264,10 @@ class BilevelConfig:
     # gradients on the same order so BC leads the first ~500 iterations, which is
     # what stage 1 is for.
     lambda_bc: float = 100.0
-    bc_anneal_end: int = 2000
+    # 4000, not 2000. See wrench_hold_iters: BC was leaving exactly as the
+    # wrench began to. This also gives PPO 1000 iterations to hold r_track on
+    # its own, with the wrench still fully on, before anything else changes.
+    bc_anneal_end: int = 4000
 
     # --------------------------------------------------------- reward (proposal.md 5.6)
     r_track_weight: float = 0.65
@@ -347,6 +387,18 @@ class BilevelConfig:
         if it >= self.bc_anneal_end:
             return 0.0
         return self.lambda_bc * 0.5 * (1.0 + math.cos(math.pi * it / self.bc_anneal_end))
+
+    def amp_scale(self, it: int) -> float:
+        """0 -> amp_weight_final, cosine over [amp_warmup_iters, amp_full_iters]."""
+        import math
+        if not self.amp_enabled:
+            return 0.0
+        if it <= self.amp_warmup_iters:
+            return 0.0
+        if it >= self.amp_full_iters:
+            return self.amp_weight_final
+        frac = (it - self.amp_warmup_iters) / max(1, self.amp_full_iters - self.amp_warmup_iters)
+        return self.amp_weight_final * 0.5 * (1.0 - math.cos(math.pi * frac))
 
     def gamma_at(self, it: int) -> float:
         return self.gamma_warmup if it < self.gamma_warmup_iters else self.gamma

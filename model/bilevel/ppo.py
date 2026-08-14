@@ -166,6 +166,7 @@ def update_lower(
     cfg, it: int, policy, value_net, optimizer, ep: Dict[str, torch.Tensor],
     pair_norm: PairAdvantageNormalizer, ret_norm: RunningScalar,
     bc_targets: Optional[torch.Tensor] = None,
+    amp_reward: Optional[torch.Tensor] = None,
 ) -> Dict[str, float]:
     """One PPO update on the collected window batch. Returns scalar metrics."""
     dev = ep["obs"].device
@@ -173,7 +174,10 @@ def update_lower(
     gamma, lam = cfg.gamma_at(it), cfg.gae_lambda
 
     terms_np = ep["terms"].detach().cpu().numpy()
-    reward = torch.as_tensor(R.combine(terms_np, cfg), dtype=torch.float32, device=dev)
+    w_amp = cfg.amp_scale(it)
+    amp_np = amp_reward.detach().cpu().numpy() if amp_reward is not None else None
+    reward = torch.as_tensor(R.combine(terms_np, cfg, r_amp=amp_np, w_amp=w_amp),
+                             dtype=torch.float32, device=dev)
     valid, done = ep["valid"], ep["done"]
     reward = reward * valid
 
@@ -294,6 +298,7 @@ def update_lower(
         "term_rate": float(done.sum() / N),
         "mean_steps": float(valid.sum() / N),
         "lambda_bc": lam_bc,
+        "w_amp": w_amp,
         "wrench_scale": ep["wrench_scale"],
     })
     return stats

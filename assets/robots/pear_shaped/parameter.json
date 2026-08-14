@@ -1,6 +1,6 @@
 {
   "label": "pear_shaped",
-  "split": "val",
+  "split": "train",
   "scale_actuators": false,
   "leg_scale": 1.0,
   "arm_scale": 0.95,

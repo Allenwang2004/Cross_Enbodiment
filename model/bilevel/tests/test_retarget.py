@@ -1,4 +1,4 @@
-"""phi = 0 must reproduce scripts/qpos_retarget.py:91 retarget_qpos exactly.
+"""p = 0 must reproduce scripts/qpos_retarget.py:91 retarget_qpos exactly.
 
 This is the anchor the whole anti-degeneracy argument rests on (proposal.md
 3.2): the naive retarget is the ARCHITECTURAL ORIGIN of the parameterization,
@@ -10,7 +10,7 @@ Also checks:
   - the hard box actually bounds the outputs at extreme u
   - the 69 hinges partition cleanly into the 14 groups, left/right tied
   - RetargetNet is zero-initialized, so u == 0 at construction
-  - gradients reach phi through ref_raw (and survive where clamp would kill them)
+  - gradients reach p through ref_raw (and survive where clamp would kill them)
   - the time-warp path is the identity at tau = 1
 
 Run:
@@ -54,7 +54,7 @@ def main():
 
     rng = np.random.default_rng(0)
     bodies = sorted(p.name for p in ROBOTS.iterdir() if (p / "robot.xml").exists())
-    print(f"phi=0 anchor vs scripts/qpos_retarget.py:91, source={cfg.source_body} (h={src_h:.6f})\n")
+    print(f"p=0 anchor vs scripts/qpos_retarget.py:91, source={cfg.source_body} (h={src_h:.6f})\n")
 
     net = RetargetNet(beta_dim=8, hidden_dims=cfg.retarget_hidden_dims).double()
     worst_anchor = 0.0
@@ -63,7 +63,7 @@ def main():
         kin = TorchKinematics(mujoco.MjModel.from_xml_path(str(ROBOTS / name / "robot.xml")))
         rt = Retargeter(cfg, net, kin, src_h).double()
 
-        # ---- 1. phi = 0 anchor -----------------------------------------
+        # ---- 1. p = 0 anchor -----------------------------------------
         T = 40
         src = np.zeros((1, T, 76))
         src[0, :, 0:3] = rng.uniform(-2, 2, size=(T, 3))
@@ -103,8 +103,8 @@ def main():
         assert e_clamp < 1e-12, f"{name}: ref is not exactly clamp(ref_raw)"
         assert e_root_untouched < 1e-12, f"{name}: clamp touched the root"
 
-    print(f"\nworst phi=0 anchor error over all bodies: {worst_anchor:.2e}")
-    assert worst_anchor < 1e-12, "phi=0 does NOT reproduce retarget_qpos"
+    print(f"\nworst p=0 anchor error over all bodies: {worst_anchor:.2e}")
+    assert worst_anchor < 1e-12, "p=0 does NOT reproduce retarget_qpos"
 
     # ---- 4. joint grouping ---------------------------------------------
     kin = TorchKinematics(mujoco.MjModel.from_xml_path(str(ROBOTS / "child" / "robot.xml")))
@@ -126,7 +126,7 @@ def main():
     assert float(u_init.abs().max()) == 0.0, "RetargetNet is not zero-initialized"
     print("RetargetNet zero-init: OK (u == 0 at construction)")
 
-    # ---- 6. gradient reaches phi, including outside jnt_range ----------
+    # ---- 6. gradient reaches p, including outside jnt_range ----------
     rt = Retargeter(cfg, RetargetNet(8, cfg.retarget_hidden_dims).double(), kin, src_h).double()
     # force every hinge far outside its range so a clamp-only path would be dead
     src_t = torch.as_tensor(src).clone()
@@ -144,7 +144,7 @@ def main():
         (p.grad.abs().sum() if p.grad is not None else torch.tensor(0.0)) for p in rt.net.parameters()
     )
     print(f"grad via ref_raw (feasibility): {float(g_raw):.3e}   via clamped ref: {float(g_clamped):.3e}")
-    assert float(g_raw) > 0, "no gradient reaches phi through ref_raw"
+    assert float(g_raw) > 0, "no gradient reaches p through ref_raw"
     assert float(g_clamped) == 0.0, (
         "expected the clamped path to be gradient-dead here -- that is exactly why "
         "apply_retarget returns ref_raw separately"
@@ -161,7 +161,7 @@ def main():
     print(f"time-warp identity at tau=1: {e_tw:.2e}")
     assert e_tw < 1e-12
 
-    print("\nPASS -- phi=0 is the naive retarget, the box holds, and gradients flow.")
+    print("\nPASS -- p=0 is the naive retarget, the box holds, and gradients flow.")
 
 
 if __name__ == "__main__":

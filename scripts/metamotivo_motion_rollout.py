@@ -15,7 +15,25 @@ Batch mode (--tasks-file): run --rollouts-per-task rollouts for every reward
 name listed in a text file (one name per line, e.g.
 docs/humenv_all_tasks_official.txt). Only the first rollout of each task is
 rendered/saved as video (video is expensive); every rollout's qpos
-trajectory and z are saved separately under --data-dir.
+trajectory, ACTION stream and z are saved separately under --data-dir.
+
+The action stream exists for open-loop cross-embodiment transfer: replay the
+adult's ctrl on a different body and see what the body alone changes. Three
+things it needs that a qpos-only dump cannot give:
+
+  * `action` itself -- what actually went into data.ctrl each step
+  * `qpos_init`/`qvel_init` -- the state AFTER reset and BEFORE the first
+    action. qpos is appended after env.step, so frame 0 of the trajectory is
+    already one action in and the true starting point was never written down.
+  * `qvel` -- needed for any velocity-referenced metric on the replay
+
+Numerics note: torch partitions a matmul by thread count, so the thread count
+is part of the result. Measured on this humanoid, a 1e-7 change in the actor's
+float32 output grows to O(1) rad within 300 steps on contact-unstable tasks
+(headstand, rotate-x). The count used is therefore RECORDED into every action
+.npz, and --torch-threads defaults to 1 -- which is also ~11x faster than
+torch's own default here, because the frozen actor runs at batch 1 and 32
+threads is pure synchronization overhead.
 
 Install (see https://github.com/facebookresearch/metamotivo):
     pip install metamotivo humenv[all] gymnasium mujoco torch imageio h5py
@@ -25,10 +43,10 @@ Usage (run from the project root):
     uv run scripts/metamotivo_motion_rollout.py --z-mode reward --reward-name "move-ego-0-2" --steps 300
     uv run scripts/metamotivo_motion_rollout.py --tasks-file docs/humenv_all_tasks_official.txt --steps 300
 
-Batch mode writes qpos to data/origin_motion/<reward_name>/, z to
-data/z/<reward_name>/, and video to outputs/robot_motion_video/ (--data-dir/
---out-dir to change either root). Single/random-rollout mode just writes
-rollout_<i>.mp4 under --out-dir.
+Batch mode writes qpos to data/origin_motion/<reward_name>/, the action stream
+to data/origin_action/<reward_name>/, z to data/z/<reward_name>/, and video to
+outputs/robot_motion_video/ (--data-dir/--out-dir to change either root).
+Single/random-rollout mode just writes rollout_<i>.mp4 under --out-dir.
 """
 
 import argparse
@@ -125,8 +143,13 @@ def rollout_once(model, env, args, seed, z, steps=None, record_video=True):
     steps = steps or args.steps
 
     obs, _ = env.reset(seed=seed)
+    # The state the action stream starts FROM. qpos_hist is appended AFTER
+    # env.step, so its frame 0 is already one action in; without this an
+    # open-loop replay has nowhere to begin.
+    qpos_init = env.unwrapped.data.qpos.copy()
+    qvel_init = env.unwrapped.data.qvel.copy()
     frames = [] if record_video else None
-    qpos_hist = []
+    qpos_hist, qvel_hist, action_hist, resets = [], [], [], []
     for t in range(steps):
         obs_t = torch.tensor(obs["proprio"], dtype=torch.float32, device=args.device)
         obs_t = obs_t.unsqueeze(0)
@@ -142,16 +165,31 @@ def rollout_once(model, env, args, seed, z, steps=None, record_video=True):
         action_np = action.cpu().numpy().ravel()
 
         obs, reward, terminated, truncated, info = env.step(action_np)
+        action_hist.append(action_np.copy())
         qpos_hist.append(info["qpos"].copy())
+        qvel_hist.append(info["qvel"].copy())
         if record_video:
             frames.append(env.render())
 
         if terminated or truncated:
+            # Currently dead: humenv's is_terminated() is hardcoded
+            # `return False` and truncated is never set, so this has never
+            # fired. It matters now that actions are being saved -- a reset
+            # here would splice two episodes into one action stream and make an
+            # open-loop replay of it meaningless. Recorded rather than removed,
+            # so if humenv ever changes, `resets` is non-empty instead of the
+            # corpus being silently wrong.
+            resets.append(t + 1)
             obs, _ = env.reset()
 
     return {
         "frames": frames,
         "qpos": np.stack(qpos_hist),
+        "qvel": np.stack(qvel_hist),
+        "action": np.stack(action_hist).astype(np.float32),
+        "qpos_init": qpos_init,
+        "qvel_init": qvel_init,
+        "resets": np.array(resets, dtype=np.int64),
     }
 
 
@@ -159,9 +197,15 @@ def run_batch(model, env, args):
     """--tasks-file mode: for every reward name in the file, run
     --rollouts-per-task rollouts, save video only for the first. Each
     rollout writes a qpos-only .npz (trajectory data, for e.g. FBX
-    conversion) under --data-dir/origin_motion/ and the z vector used
-    (a per-rollout latent, not a per-frame trajectory) under
-    --data-dir/z/.
+    conversion) under --data-dir/origin_motion/, the full replay record
+    (action + qpos + qvel + initial state + provenance) under
+    --data-dir/origin_action/, and the z vector used (a per-rollout latent,
+    not a per-frame trajectory) under --data-dir/z/.
+
+    origin_motion stays qpos-only on purpose: model/bilevel/data.py:255 reads
+    it as np.load(path)["qpos"] and it is already ~98 MB resident across 540
+    clips. The replay-only arrays go in their own tree rather than fattening
+    the one every training iteration loads.
 
     args.z_only skips rollout_once (and hence the qpos .npz/video) entirely:
     z comes from compute_reward_z(), which only needs a buffer sample + a
@@ -179,15 +223,19 @@ def run_batch(model, env, args):
     data_dir = Path(args.data_dir)
     video_dir = Path(args.out_dir)
     npz_dir = data_dir / "origin_motion"
+    act_dir = data_dir / "origin_action"
     z_dir = data_dir / "z"
     video_dir.mkdir(parents=True, exist_ok=True)
     npz_dir.mkdir(parents=True, exist_ok=True)
+    act_dir.mkdir(parents=True, exist_ok=True)
     z_dir.mkdir(parents=True, exist_ok=True)
 
     for task_idx, reward_name in enumerate(reward_names):
         task_npz_dir = npz_dir / reward_name
+        task_act_dir = act_dir / reward_name
         task_z_dir = z_dir / reward_name
         task_npz_dir.mkdir(parents=True, exist_ok=True)
+        task_act_dir.mkdir(parents=True, exist_ok=True)
         task_z_dir.mkdir(parents=True, exist_ok=True)
 
         steps = steps_for_task(reward_name, args.steps) if args.auto_steps else args.steps
@@ -209,13 +257,39 @@ def run_batch(model, env, args):
             npz_path = task_npz_dir / f"{reward_name}_{trial}.npz"
             np.savez(npz_path, qpos=result["qpos"])
 
+            # Everything an open-loop replay on another body needs, plus the
+            # provenance that makes this rollout reproducible: the exact z, the
+            # seed, and the torch thread count (which IS part of the numerics --
+            # see the module docstring).
+            act_path = task_act_dir / f"{reward_name}_{trial}.npz"
+            np.savez(
+                act_path,
+                action=result["action"], qpos=result["qpos"], qvel=result["qvel"],
+                qpos_init=result["qpos_init"], qvel_init=result["qvel_init"],
+                resets=result["resets"], z=z.cpu().numpy().ravel(),
+                seed=seed, steps=steps, model=args.model,
+                torch_threads=torch.get_num_threads(),
+            )
+
             if record_video:
                 video_path = video_dir / f"{reward_name}.mp4"
                 imageio.mimsave(video_path, result["frames"], fps=30)
 
             print(f"[{task_idx + 1}/{len(reward_names)} {reward_name}] "
-                  f"trial {trial + 1}/{args.rollouts_per_task} -> {npz_path}, {z_path}"
-                  + (f" (+ video)" if record_video else ""))
+                  f"trial {trial + 1}/{args.rollouts_per_task} -> {npz_path}, "
+                  f"{act_path}, {z_path}"
+                  + (f" (+ video)" if record_video else ""), flush=True)
+            # A reset AT `steps` is gymnasium's TimeLimit firing on the final
+            # iteration (make_humenv's DEFAULT_MAX_EPISODE_STEPS is 300, which
+            # is also TASK_STEP_RULES' longest). qpos is appended before the
+            # reset and the loop ends immediately after, so nothing recorded is
+            # affected. Only a reset STRICTLY INSIDE the window splices two
+            # episodes into one action stream and breaks open-loop replay.
+            mid = [int(r) for r in result["resets"] if r < steps]
+            if mid:
+                print(f"    WARNING: {len(mid)} mid-episode reset(s) at {mid} -- this "
+                      f"action stream splices episodes and is NOT replayable "
+                      f"open-loop", flush=True)
 
 
 def main():
@@ -261,13 +335,27 @@ def main():
                               "--tasks-file mode: <reward_name>.mp4 here)")
     parser.add_argument("--data-dir", default="data",
                          help="--tasks-file mode only: qpos goes to "
-                              "<data-dir>/origin_motion/<reward_name>/, z to "
-                              "<data-dir>/z/<reward_name>/")
+                              "<data-dir>/origin_motion/<reward_name>/, the "
+                              "action stream to <data-dir>/origin_action/"
+                              "<reward_name>/, z to <data-dir>/z/<reward_name>/")
+    parser.add_argument("--torch-threads", type=int, default=1,
+                         help="torch intra-op threads. PART OF THE NUMERICS: the "
+                              "thread count sets the matmul reduction order, and "
+                              "this system is chaotic enough that a 1e-7 change "
+                              "grows to O(1) rad in 300 steps on headstand / "
+                              "rotate-x. Recorded into every action .npz. 1 is "
+                              "also ~11x faster than torch's default here (14 vs "
+                              "155 ms/step) because the actor runs at batch 1. "
+                              "0 leaves torch's default untouched.")
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
 
     if args.tasks_file is None and args.z_mode == "reward" and args.reward_name is None:
         parser.error("--reward-name is required when --z-mode reward")
+
+    if args.torch_threads > 0:
+        torch.set_num_threads(args.torch_threads)
+    print(f"torch threads: {torch.get_num_threads()} (recorded into each action .npz)")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

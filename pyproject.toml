@@ -1,0 +1,18 @@
+[project]
+name = "crossenbodiment"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "huggingface-hub>=1.27.0",
+    "imageio[ffmpeg]>=2.37.4",
+    "metamotivo[huggingface,humenv]",
+    "numpy>=2.4.6",
+    "torch>=2.13.0",
+    "torchaudio>=2.11.0",
+    "torchvision>=0.28.0",
+]
+
+[tool.uv.sources]
+metamotivo = { git = "https://github.com/facebookresearch/metamotivo.git" }

@@ -280,10 +280,19 @@ def set_adult_leg_len(v: float) -> None:
     _ADULT_LEG_LEN = float(v)
 
 
-def combine(terms: np.ndarray, cfg) -> np.ndarray:
+def combine(terms: np.ndarray, cfg, r_amp=None, w_amp: float = 0.0) -> np.ndarray:
     """Unweighted terms (..., N_TERMS) -> scalar reward (...), bounded in [0, 1].
 
     Applied in the MAIN process, never in the worker -- see the module docstring.
+
+    `r_amp` (same shape, in [0, 1]) blends into the TRACKING channel rather than
+    being added on top:
+
+        r_track_eff = (1 - w_amp) * r_track + w_amp * r_amp
+
+    so the 0.65 / 0.15 / 0.20 split and the [0, 1] bound both survive, and
+    w_amp = 1 means "the style discriminator has fully replaced the frame-by-frame
+    target". See amp.py for why that replacement is the point.
     """
     i = TERM_IDX
     r_track = (
@@ -301,6 +310,8 @@ def combine(terms: np.ndarray, cfg) -> np.ndarray:
         + cfg.e_ext * terms[..., i["e_ext"]]
         + cfg.e_slip * terms[..., i["e_slip"]]
     )
+    if r_amp is not None and w_amp > 0.0:
+        r_track = (1.0 - w_amp) * r_track + w_amp * np.asarray(r_amp)
     r_reg = np.exp(-pen)
     r_surv = terms[..., i["alive"]]
     return (
