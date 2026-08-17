@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# 針對所有 tasks 畫他們的 torque ratio correlation heatmap，檢查 child/adult torque ratio 是否是 body property 還是 motion property
 """torque_ratio_across_motions.py — is the per-joint child/adult torque ratio a
 property of the BODY, or of the motion?
 

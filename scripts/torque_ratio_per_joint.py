@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# 把 motion 跟 retargeting_motion 的 force 用逆向工程求出
-# 然後算出每個 joint 的 child/adult torque ratio，並畫圖檢查
 """torque_ratio_per_joint.py — is the inverse-dynamics torque of the child a
 constant multiple of the adult's, joint by joint?
 
@@ -109,7 +107,7 @@ def joint_torques(xml, qpos, dt, *, mode="gravity"):
     gear = model.actuator_gear[:, 0]
 
     if mode == "gravity":
-        T = len(qpos)
+        T = len(qpos) 
         tau = np.zeros((T, model.nv))
         ncon = np.zeros(T, dtype=int)
         for t in range(T):
@@ -118,14 +116,14 @@ def joint_torques(xml, qpos, dt, *, mode="gravity"):
             mujoco.mj_forward(model, data)
             tau[t] = data.qfrc_bias
             ncon[t] = data.ncon         # recorded for the plot, not used in the fit
-    else:
-        # imported lazily: notebooks/actuator.py is only needed by quasi/full,
-        # and the default gravity mode must run even when it is absent.
-        from notebooks.actuator import differentiate_trajectory, inverse_dynamics
+    # else:
+    #     # imported lazily: notebooks/actuator.py is only needed by quasi/full,
+    #     # and the default gravity mode must run even when it is absent.
+    #     from notebooks.actuator import differentiate_trajectory, inverse_dynamics
 
-        qvel, qacc = differentiate_trajectory(model, qpos, dt)
-        tau, ncon = inverse_dynamics(model, data, qpos, qvel, qacc,
-                                     quasi_static=(mode == "quasi"))
+    #     qvel, qacc = differentiate_trajectory(model, qpos, dt)
+    #     tau, ncon = inverse_dynamics(model, data, qpos, qvel, qacc,
+    #                                  quasi_static=(mode == "quasi"))
 
     return tau[:, dofs] / gear, ncon, names, model
 
