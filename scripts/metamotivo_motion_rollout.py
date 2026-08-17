@@ -45,7 +45,7 @@ Usage (run from the project root):
 
 Batch mode writes qpos to data/origin_motion/<reward_name>/, the action stream
 to data/origin_action/<reward_name>/, z to data/z/<reward_name>/, and video to
-outputs/robot_motion_video/ (--data-dir/--out-dir to change either root).
+outputs/metamotivo_motion_rollout/ (--data-dir/--out-dir to change either root).
 Single/random-rollout mode just writes rollout_<i>.mp4 under --out-dir.
 """
 
@@ -329,7 +329,7 @@ def main():
                               "(each with a fresh random z when --z-mode random)")
     parser.add_argument("--seed", type=int, default=0,
                          help="base seed; rollout i uses seed + i")
-    parser.add_argument("--out-dir", default="outputs/robot_motion_video",
+    parser.add_argument("--out-dir", default="outputs/metamotivo_motion_rollout",
                          help="directory to write video into (single-rollout "
                               "mode: rollout_<i>.mp4 directly here; "
                               "--tasks-file mode: <reward_name>.mp4 here)")

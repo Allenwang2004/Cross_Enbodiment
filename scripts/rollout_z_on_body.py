@@ -20,7 +20,7 @@ Usage (from project root):
         --z data/retargeting_z/move-ego--90-2/move-ego--90-2_0.npy \
         --xml assets/robots_calib/child/robot.xml \
         --reference data/retargeting_motion/move-ego--90-2/move-ego--90-2_0.npz \
-        --out outputs/z_rollout/move-ego--90-2_0_child.mp4
+        --out outputs/rollout_z_on_body/move-ego--90-2_0_child.mp4
 
 Writes <out> (mp4) and <out>.npz (qpos/qvel/action of the physical rollout).
 With --reference, the video is side by side: LEFT = the retargeted reference

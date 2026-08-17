@@ -74,7 +74,7 @@ Usage (from project root):
     uv run scripts/replay_actions_on_body.py --bodies child giant --workers 8
     uv run scripts/replay_actions_on_body.py --task-prefixes move jump crawl
 
-Writes under --out (default outputs/replay_fall/):
+Writes under --out (default outputs/replay_actions_on_body/):
     per_clip.csv    one row per (clip, body): fall step, reason, survival, drift
     summary.json    per-body and per-task aggregates + the thresholds used
     survival.csv    fraction still standing at each step, per body
@@ -257,7 +257,7 @@ def main():
                          "the uncalibrated originals, where only 8 of 13 bodies can "
                          "hold their own rest pose, i.e. geometry AND actuator "
                          "shortfall together. Use two --out dirs to compare.")
-    ap.add_argument("--out", default="outputs/replay_fall")
+    ap.add_argument("--out", default="outputs/replay_actions_on_body")
     args = ap.parse_args()
 
     cfg = BilevelConfig()

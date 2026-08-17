@@ -15,14 +15,14 @@ Usage (from project root):
     uv run scripts/infer_z_from_qpos.py --qpos data/origin_motion/move-ego--90-2/move-ego--90-2_0.npz \
         --xml assets/robots/adult/robot.xml \
         --z0 data/z/move-ego--90-2/move-ego--90-2_0.npy \
-        --out outputs/z_infer/move-ego--90-2_0
+        --out outputs/infer_z_from_qpos/move-ego--90-2_0
 
     # same motion, but retargeted onto a different body -- see how much
     # cross-embodiment inference degrades vs the same-body case above
     uv run scripts/infer_z_from_qpos.py --qpos data/retargeted_motion/move-ego--90-2_0.npz \
         --xml assets/robots/child/robot.xml \
         --z0 data/z/move-ego--90-2/move-ego--90-2_0.npy \
-        --out outputs/z_infer/move-ego--90-2_0_child
+        --out outputs/infer_z_from_qpos/move-ego--90-2_0_child
 
 Writes (if --out is given):
     <out>_z_track.npy   (T, 256) -- per-step tracking_inference z

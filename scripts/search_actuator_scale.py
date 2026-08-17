@@ -47,7 +47,7 @@ Usage (from project root):
     uv run scripts/search_actuator_scale.py --task-prefixes move jump
     uv run scripts/search_actuator_scale.py --write-tree assets/robots_searched
 
-Writes under --out (default outputs/actuator_search/):
+Writes under --out (default outputs/search_actuator_scale/):
     curve.csv     every (body, s) with all metrics -- the full trade-off curve
     chosen.json   s* per body under the rule, plus the unconstrained argmin
 """
@@ -196,7 +196,7 @@ def main():
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--write-tree", default=None,
                     help="also write the chosen actuators out as a new asset tree")
-    ap.add_argument("--out", default="outputs/actuator_search")
+    ap.add_argument("--out", default="outputs/search_actuator_scale")
     args = ap.parse_args()
 
     cfg = BilevelConfig()

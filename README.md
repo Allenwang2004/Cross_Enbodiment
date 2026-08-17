@@ -332,7 +332,7 @@ python scripts/rollout_video.py \
     --task move-ego-0-2 --body child
 ```
 
-輸出左右對照的 mp4（左：參考動作，右：物理機器人）到 `outputs/bilevel_video/`。
+輸出左右對照的 mp4（左：參考動作，右：物理機器人）到 `outputs/rollout_video/`。
 `--list-tasks` 列出可用動作、`--wrench 1` 開回外力看它有多依賴拐杖、`--steps N` 限制長度。
 
 用的是與訓練 `long/` 指標**完全同一個** `rollout_one()`，所以影片下的數字和曲線不會對不上。

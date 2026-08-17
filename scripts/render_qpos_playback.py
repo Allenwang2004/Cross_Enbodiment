@@ -7,7 +7,7 @@ Usage (from project root):
     uv run scripts/render_qpos_playback.py \
         --qpos data/origin_motion/move-ego--90-2/move-ego--90-2_0.npz --xml assets/robots/adult/robot.xml \
         --qpos2 data/origin_motion/move-ego--90-2/move-ego--90-2_0.npz --xml2 assets/robots/child/robot.xml \
-        --out outputs/robot_video/compare.mp4 2>&1 | grep -v "EGLError\|Exception ignored\|Traceback\|File \"\|renderer.py\|__init__.py\|error.py"
+        --out outputs/render_qpos_playback/compare.mp4 2>&1 | grep -v "EGLError\|Exception ignored\|Traceback\|File \"\|renderer.py\|__init__.py\|error.py"
 """
 
 import argparse

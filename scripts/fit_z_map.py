@@ -27,7 +27,7 @@ Two things are load-bearing and easy to get wrong:
 
 Usage (from project root):
     python3 scripts/fit_z_map.py
-    python3 scripts/fit_z_map.py --tree retargeting_z --out-dir outputs/z_map_child
+    python3 scripts/fit_z_map.py --tree retargeting_z --out-dir outputs/fit_z_map_child
 
 Writes <out-dir>/W.npz (maps + the held-out task list eval_z_map_rollout.py
 uses) and <out-dir>/cosine_by_method.png.
@@ -167,7 +167,7 @@ def main():
     ap.add_argument("--data-root", default="data")
     ap.add_argument("--tree", default="z_inference", help="dir of inferred (T,256) z")
     ap.add_argument("--z-dir", default="z", help="dir of the target z0")
-    ap.add_argument("--out-dir", default="outputs/z_map")
+    ap.add_argument("--out-dir", default="outputs/fit_z_map")
     ap.add_argument("--n-splits", type=int, default=8)
     ap.add_argument("--n-train-tasks", type=int, default=38)
     ap.add_argument("--lams", type=float, nargs="+", default=[0.1, 0.3, 1.0, 3.0, 10.0])

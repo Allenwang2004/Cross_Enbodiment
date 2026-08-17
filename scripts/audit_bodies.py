@@ -116,7 +116,7 @@ def main():
     ap.add_argument("--source", default="adult")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--robots", type=Path, default=REPO_ROOT / "assets" / "robots")
-    ap.add_argument("--json-out", type=Path, default=REPO_ROOT / "outputs" / "body_audit.json")
+    ap.add_argument("--json-out", type=Path, default=REPO_ROOT / "outputs" / "audit_bodies" / "body_audit.json")
     args = ap.parse_args()
 
     robots = args.robots

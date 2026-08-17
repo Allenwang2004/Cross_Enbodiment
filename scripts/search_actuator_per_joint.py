@@ -164,7 +164,7 @@ def main():
     ap.add_argument("--timestep", type=float, default=1.0 / 450.0)
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--write-tree", default=None)
-    ap.add_argument("--out", default="outputs/actuator_search_pj")
+    ap.add_argument("--out", default="outputs/search_actuator_per_joint")
     args = ap.parse_args()
 
     cfg = BilevelConfig()

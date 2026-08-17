@@ -83,11 +83,11 @@ def rollout(model, env, z, steps, seed, device):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--map", default="outputs/z_map/W.npz")
+    ap.add_argument("--map", default="outputs/fit_z_map/W.npz")
     ap.add_argument("--data-root", default="data")
     ap.add_argument("--tree", default="z_inference")
     ap.add_argument("--xml", default="assets/robots/adult/robot.xml")
-    ap.add_argument("--out-dir", default="outputs/z_map")
+    ap.add_argument("--out-dir", default="outputs/eval_z_map_rollout")
     ap.add_argument("--trial", type=int, default=0)
     ap.add_argument("--steps", type=int, default=300)
     ap.add_argument("--model", default="facebook/metamotivo-M-1")

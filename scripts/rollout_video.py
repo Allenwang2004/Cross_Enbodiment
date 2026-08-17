@@ -153,7 +153,7 @@ def main():
           f"(termination threshold {cfg.term_pose_err})")
     print(f"root drift : {st['root_dist']:.3f} m mean, {st['root_dist_max']:.3f} m max")
 
-    out = args.out or (REPO_ROOT / "outputs" / "bilevel_video" /
+    out = args.out or (REPO_ROOT / "outputs" / "rollout_video" /
                        f"{args.body}_{args.task}_{args.trial}"
                        f"{'_wrench' if args.wrench else ''}.mp4")
     out.parent.mkdir(parents=True, exist_ok=True)

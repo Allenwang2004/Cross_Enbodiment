@@ -45,7 +45,7 @@ Usage (from project root):
         --trees assets/robots assets/robots_cal_alltrain assets/robots_cal_movetrain \
         --tasks-file datasets/crossenbodiment-1-datasets/splits/test_tasks.txt
 
-Writes under --out (default outputs/pd_track/):
+Writes under --out (default outputs/pd_track_bodies/):
     per_clip.csv   one row per (tree, body, clip)
     summary.json   per-tree and per-tree-x-body aggregates
 """
@@ -182,7 +182,7 @@ def main():
     ap.add_argument("--timestep", type=float, default=1.0 / 450.0)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=16)
-    ap.add_argument("--out", default="outputs/pd_track")
+    ap.add_argument("--out", default="outputs/pd_track_bodies")
     args = ap.parse_args()
 
     cfg = BilevelConfig()

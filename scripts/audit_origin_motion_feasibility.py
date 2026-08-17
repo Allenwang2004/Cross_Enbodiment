@@ -34,7 +34,7 @@ Usage (from project root):
     uv run scripts/audit_origin_motion_feasibility.py --bodies child teen giant
     uv run scripts/audit_origin_motion_feasibility.py --limit-clips 20 --device cpu
 
-Writes under --out (default outputs/qpos_audit/):
+Writes under --out (default outputs/audit_origin_motion_feasibility/):
     per_clip.csv    one row per (clip, body): all C and S terms + diagnostics
     per_joint.csv   one row per (body, joint): violation rate, mean/max excess rad
     summary.json    per-body and per-task aggregates, plus the cfg values used
@@ -193,7 +193,7 @@ def main():
     ap.add_argument("--limit-clips", type=int, default=None, help="smoke-test on the first N clips")
     ap.add_argument("--chunk", type=int, default=64, help="clips per FK batch")
     ap.add_argument("--device", default=None)
-    ap.add_argument("--out", default="outputs/qpos_audit")
+    ap.add_argument("--out", default="outputs/audit_origin_motion_feasibility")
     args = ap.parse_args()
 
     cfg = BilevelConfig()
