@@ -2,7 +2,7 @@
 """aggregate_motion_k.py — one actuator scaling from all 54 motions, after the
 motions that disagree with the rest are thrown out.
 
-scripts/scale_child_actuators.py builds robot_torque.xml from ONE clip's fit, so
+scripts/torque_scale_actuators.py builds robot_torque.xml from ONE clip's fit, so
 whatever that clip happens to load determines the whole body's actuator sizing.
 scripts/torque_ratio_across_motions.py showed that is not safe: the k vectors of
 the 54 motions correlate at median 0.93 but down to 0.53, and the disagreement
@@ -28,12 +28,22 @@ gravity torque in that clip fits an arbitrary k at R^2~0. So a joint's average
 uses only the kept motions where that joint ALSO cleared --r2-min, and a joint
 with no such motion anywhere falls back to k_predicted_subtree (downstream
 subtree mass x lever arm), the same positive-by-construction fallback
-scale_child_actuators.py uses.
+torque_scale_actuators.py uses.
+
+Left and right get the same k here too
+--------------------------------------
+Averaging over motions shrinks the left/right disagreement but does not remove
+it -- the 54 clips are individually one-sided and the set is not balanced -- so
+the mirrored pairs are equalised after the average, by the same rule and the same
+code as torque_scale_actuators.py. See its docstring for why the body's own
+symmetry (k_predicted_subtree agrees L/R to 0.026%) makes this the correct
+reading and the per-actuator spread the artefact.
 
 Usage:
   uv run scripts/aggregate_motion_k.py
   uv run scripts/aggregate_motion_k.py --z 2.5 --agg median
   uv run scripts/aggregate_motion_k.py --out assets/robots/child/robot_torque.xml
+  uv run scripts/aggregate_motion_k.py --symmetry none
 """
 
 from __future__ import annotations
@@ -50,7 +60,8 @@ import mujoco
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scripts.scale_child_actuators import write_scaled_xml  # noqa: E402
+from scripts.torque_scale_actuators import (  # noqa: E402
+    print_symmetry_report, symmetrize_k, write_scaled_xml)
 from scripts.torque_ratio_per_joint import predicted_ratios  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -92,6 +103,9 @@ def main():
                    help="a motion contributes to a joint's average only if its "
                         "fit for that joint reached this R²")
     p.add_argument("--agg", choices=["mean", "median"], default="mean")
+    p.add_argument("--symmetry", choices=["pair", "none"], default="pair",
+                   help="'pair' gives each mirrored L/R actuator pair one shared "
+                        "k; 'none' keeps the raw per-actuator average")
     args = p.parse_args()
 
     mdir = Path(args.matrix)
@@ -126,7 +140,7 @@ def main():
         raise SystemExit("the k matrix's joints do not match the model's actuators")
 
     Kk, R2k = K[keep], R2[keep]
-    kmap, spread, notes = {}, {}, []
+    kmap, spread, notes, trusted = {}, {}, [], set()
     for j, name in enumerate(joints):
         ok = np.isfinite(Kk[:, j]) & (R2k[:, j] >= args.r2_min) & (Kk[:, j] > 0)
         if ok.sum() == 0:
@@ -140,6 +154,12 @@ def main():
         vals = Kk[ok, j]
         kmap[name] = float(np.mean(vals) if args.agg == "mean" else np.median(vals))
         spread[name] = (int(ok.sum()), float(vals.std()))
+        trusted.add(name)
+
+    if args.symmetry == "pair":
+        print()
+        report, midline = symmetrize_k(kmap, trusted)
+        print_symmetry_report(report, midline)
 
     kv = np.array([kmap[n] for n in joints])
     cv = np.array([spread[n][1] / abs(kmap[n]) if spread[n][0] else np.nan
@@ -171,13 +191,19 @@ def main():
     print(f"  per-actuator table -> {agg_csv}")
 
     print()
-    write_scaled_xml(args.src, args.out, kmap)
+    write_scaled_xml(args.src, args.out, kmap,
+                     check_symmetry=(args.symmetry == "pair"))
 
     # How much the motion choice actually mattered: the single-clip k this
-    # replaces vs the aggregate, per joint.
-    k_all = np.array([np.mean(K[np.isfinite(K[:, j]) & (R2[:, j] >= args.r2_min)
-                                & (K[:, j] > 0), j]) if (R2[:, j] >= args.r2_min).any()
-                      else np.nan for j in range(len(joints))])
+    # replaces vs the aggregate, per joint. Symmetrised the same way, so the
+    # number isolates the dropping of motions rather than mixing in the pairing.
+    k_all = {name: float(np.mean(K[np.isfinite(K[:, j]) & (R2[:, j] >= args.r2_min)
+                                   & (K[:, j] > 0), j]))
+             if (R2[:, j] >= args.r2_min).any() else np.nan
+             for j, name in enumerate(joints)}
+    if args.symmetry == "pair":
+        symmetrize_k(k_all, {n for n, v in k_all.items() if np.isfinite(v)})
+    k_all = np.array([k_all[n] for n in joints])
     d = np.abs(kv - k_all) / np.abs(k_all)
     print(f"\nvs averaging all {len(motions)} motions: median |Δk|/k "
           f"{np.nanmedian(d):.2%}, worst {joints[int(np.nanargmax(d))]} "

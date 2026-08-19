@@ -102,7 +102,8 @@ mujoco_Humanoid_motionretargeting/
 
 /wandb
 
-/amass_origin_motion
-/amass_retargeting_motion
-/amass_retargeting_z
-/amass_z_inference
+/amass_data/amass_origin_motion
+/amass_data/amass_retargeting_motion
+/amass_data/amass_infer_retargeting_z
+/amass_data/amass_infer_origin_z
+/amass_data/raw

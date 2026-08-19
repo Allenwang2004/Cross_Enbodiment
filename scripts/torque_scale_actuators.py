@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scale_child_actuators.py — write a child MJCF whose actuators are scaled by the
+"""torque_scale_actuators.py — write a child MJCF whose actuators are scaled by the
 per-joint torque ratio k measured against the adult.
 
 The child's actuators are byte-identical to the adult's (every gainprm /
@@ -34,9 +34,31 @@ those fall back to k_predicted_subtree -- the physical prediction (downstream
 subtree mass x lever arm) read from the two MJCFs, which is positive for every
 joint by construction. --r2-min controls the threshold.
 
+Left and right get the SAME k
+-----------------------------
+The fit is per actuator, so L_Shoulder_y and R_Shoulder_y come out at 0.2161 and
+0.2122 on move-ego-90 -- a 1.8% difference that is entirely an artefact of the
+clip turning one way. The body itself is symmetric: k_predicted_subtree, which
+is read from the two MJCFs and knows nothing about any motion, agrees left/right
+to 0.026% on every pair. Letting the clip's bias through would size the two legs'
+motors differently for no physical reason, so --symmetry pair (the default) gives
+each of the 27 mirrored pairs one shared k; the 15 midline actuators
+(Torso/Spine/Chest/Neck/Head) have no partner and keep their own.
+
+  both sides cleared --r2-min   ->  mean of the two fitted k
+  one side cleared it           ->  that side's k (the other is noise)
+  neither                       ->  mean of the two fallbacks
+
+Scaling all four affine terms preserves the mirror exactly. The two MJCFs are
+mirror images rather than copies -- gainprm, biasprm[1..2] and forcerange are
+identical L/R while biasprm[0] flips sign on the y and z axes -- and k multiplies
++b and -b alike, so an equal k leaves the pair an exact mirror. check_mirror()
+asserts that on the written file rather than trusting it.
+
 Usage:
-  uv run scripts/scale_child_actuators.py
-  uv run scripts/scale_child_actuators.py --out assets/robots/child/robot_torque.xml
+  uv run scripts/torque_scale_actuators.py
+  uv run scripts/torque_scale_actuators.py --out assets/robots/child/robot_torque.xml
+  uv run scripts/torque_scale_actuators.py --symmetry none   # per-actuator k
 """
 
 from __future__ import annotations
@@ -65,14 +87,20 @@ def fmt(x: float) -> str:
 
 
 def choose_k(rows, r2_min):
-    """Per-actuator scale factor, with the fallback rule applied and reported."""
-    out, notes = {}, []
+    """Per-actuator scale factor, with the fallback rule applied and reported.
+
+    Returns (kmap, notes, trusted); trusted holds the actuators whose own fitted
+    k survived, which is what symmetrize_k needs to know when the two sides of a
+    pair disagree about whether their fit meant anything.
+    """
+    out, notes, trusted = {}, [], set()
     for r in rows:
         name = r["actuator"]
         kf, r2, kp = (float(r["k_fitted"]), float(r["r2"]),
                       float(r["k_predicted_subtree"]))
         if r2 >= r2_min and kf > 0:
             out[name] = kf
+            trusted.add(name)
             continue
         if not (kp > 0) or not np.isfinite(kp):
             out[name] = 1.0
@@ -82,7 +110,106 @@ def choose_k(rows, r2_min):
         out[name] = kp
         why = "k_fitted<=0" if kf <= 0 else f"R²={r2:.3f}<{r2_min}"
         notes.append(f"{name}: {why}, k_fitted={kf:+.4f} -> using predictor {kp:.4f}")
-    return out, notes
+    return out, notes, trusted
+
+
+def mirror_pairs(names):
+    """Split actuator names into (left, right) pairs and midline singles.
+
+    Pairing is by the L_/R_ prefix the skeleton already uses. A half-pair means
+    the naming convention broke, which would silently leave that joint
+    asymmetric, so it aborts instead of skipping.
+    """
+    have = set(names)
+    pairs, midline, orphans = [], [], []
+    for n in names:
+        if n.startswith("L_"):
+            partner = "R_" + n[2:]
+            (pairs.append((n, partner)) if partner in have else orphans.append(n))
+        elif n.startswith("R_"):
+            if "L_" + n[2:] not in have:
+                orphans.append(n)
+        else:
+            midline.append(n)
+    if orphans:
+        raise SystemExit(f"{len(orphans)} actuator(s) have no mirror partner: "
+                         f"{orphans[:5]}")
+    return pairs, midline
+
+
+def symmetrize_k(kmap, trusted):
+    """Give both actuators of every mirrored pair one shared k, in place.
+
+    The rule is in the module docstring. The one-sided case matters more than it
+    looks: a joint that carries almost no gravity torque in a clip fits an
+    arbitrary k, and averaging that into the good side would corrupt both
+    actuators instead of neither.
+    """
+    pairs, midline = mirror_pairs(list(kmap))
+    report = []
+    for lname, rname in pairs:
+        kl, kr = kmap[lname], kmap[rname]
+        tl, tr = lname in trusted, rname in trusted
+        if tl == tr:                      # both fitted, or both fell back
+            k, why = 0.5 * (kl + kr), "mean" if tl else "mean of fallbacks"
+        elif tl:
+            k, why = kl, "L only (R untrusted)"
+        else:
+            k, why = kr, "R only (L untrusted)"
+        kmap[lname] = kmap[rname] = k
+        moved = max(abs(kl - k), abs(kr - k)) / max(abs(k), 1e-12)
+        report.append((lname[2:], kl, kr, k, moved, why))
+    return report, midline
+
+
+def print_symmetry_report(report, midline, top=6):
+    moved_any = [r for r in report if r[4] > 1e-12]
+    print(f"symmetry: {len(report)} mirrored pairs share one k, "
+          f"{len(midline)} midline actuators keep their own")
+    if not moved_any:
+        print("  every pair already agreed; no k changed")
+        return
+    worst = sorted(moved_any, key=lambda r: -r[4])[:top]
+    print(f"  {len(moved_any)} pair(s) moved; largest {len(worst)}:")
+    print(f"    {'joint':14s} {'k_L':>8s} {'k_R':>8s} {'k_pair':>8s} {'moved':>7s}  rule")
+    for j, kl, kr, k, moved, why in worst:
+        print(f"    {j:14s} {kl:8.4f} {kr:8.4f} {k:8.4f} {moved:6.2%}  {why}")
+    special = [r for r in report if not r[5].startswith("mean")]
+    if special:
+        print(f"  {len(special)} pair(s) used one side only:")
+        for j, kl, kr, k, _, why in special:
+            print(f"    {j:14s} k_L {kl:.4f}  k_R {kr:.4f} -> {k:.4f}  ({why})")
+
+
+def check_mirror(model, tol=1e-9):
+    """Assert the written actuators are still exact mirror images.
+
+    gainprm, biasprm[1..2] and forcerange are equal L/R in the source MJCF while
+    biasprm[0] flips sign on the y and z axes, so the invariant is "equal, except
+    biasprm[0] which is equal in magnitude". Scaling by an equal k preserves all
+    four; an unequal k breaks every one of them, which is what this catches.
+    """
+    names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+             for i in range(model.nu)]
+    idx = {n: i for i, n in enumerate(names)}
+    pairs, _ = mirror_pairs(names)
+    worst = 0.0
+    for lname, rname in pairs:
+        a, b = idx[lname], idx[rname]
+        d = max(
+            np.abs(model.actuator_gainprm[a] - model.actuator_gainprm[b]).max(),
+            np.abs(model.actuator_biasprm[a, 1:3]
+                   - model.actuator_biasprm[b, 1:3]).max(),
+            np.abs(np.abs(model.actuator_forcerange[a])
+                   - np.abs(model.actuator_forcerange[b])).max(),
+            abs(abs(model.actuator_biasprm[a, 0])
+                - abs(model.actuator_biasprm[b, 0])),
+        )
+        if d > tol:
+            raise SystemExit(f"  !! {lname}/{rname} are not mirror images "
+                             f"(max term difference {d:.3e})")
+        worst = max(worst, float(d))
+    return len(pairs), worst
 
 
 def scale_line(line: str, k: float) -> str:
@@ -135,13 +262,16 @@ def verify(src_xml, out_xml, kmap, names, n_states=40, seed=0):
     return worst, mb
 
 
-def write_scaled_xml(src, out, kmap):
+def write_scaled_xml(src, out, kmap, check_symmetry=True):
     """Apply kmap to every <general> line of src, write out, and verify exactly.
 
     Shared with scripts/aggregate_motion_k.py, which supplies a k averaged over
     many motions instead of a single clip's fit; everything downstream of "here
     is one k per actuator" is identical, and the verification below is the part
     that must not be duplicated and drift.
+
+    check_symmetry asserts the mirrored pairs came out identical, so it must be
+    off when the caller deliberately used a per-actuator k (--symmetry none).
     """
     src, out = Path(src), Path(out)
     model = mujoco.MjModel.from_xml_path(str(src))
@@ -187,6 +317,10 @@ def write_scaled_xml(src, out, kmap):
     print(f"  gainprm ratio matches k: {np.abs(gain_r - kv).max():.2e}")
     print(f"  new forcerange: mean ±{np.abs(mb.actuator_forcerange[:, 1]).mean():.1f} N·m "
           f"(was ±{np.abs(model.actuator_forcerange[:, 1]).mean():.1f})")
+    if check_symmetry:
+        n_pairs, worst_mirror = check_mirror(mb)
+        print(f"  left/right mirror holds for all {n_pairs} pairs "
+              f"(max term difference {worst_mirror:.2e})")
     return names
 
 
@@ -197,6 +331,9 @@ def main():
     p.add_argument("--out", default=str(DEFAULT_OUT))
     p.add_argument("--r2-min", type=float, default=0.9,
                    help="below this the fitted k is replaced by the predictor")
+    p.add_argument("--symmetry", choices=["pair", "none"], default="pair",
+                   help="'pair' gives each mirrored L/R actuator pair one shared "
+                        "k; 'none' keeps the raw per-actuator fit")
     args = p.parse_args()
 
     rows = list(csv.DictReader(open(args.csv)))
@@ -212,13 +349,18 @@ def main():
         raise SystemExit(f"csv covers {len(csv_names)} actuators, model has "
                          f"{len(names)}; names do not match")
 
-    kmap, notes = choose_k(rows, args.r2_min)
+    kmap, notes, trusted = choose_k(rows, args.r2_min)
     if notes:
         print(f"{len(notes)} actuator(s) did not use the fitted k:")
         for n in notes:
             print(f"    {n}")
 
-    write_scaled_xml(src, out, kmap)
+    if args.symmetry == "pair":
+        report, midline = symmetrize_k(kmap, trusted)
+        print()
+        print_symmetry_report(report, midline)
+    print()
+    write_scaled_xml(src, out, kmap, check_symmetry=(args.symmetry == "pair"))
 
 
 if __name__ == "__main__":
